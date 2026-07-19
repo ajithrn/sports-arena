@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Sports Arena - Live Sports Streaming">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Sports Arena">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Sports Arena</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #121212;
+    }
+  </style>
+
+  <script>
+    // ═══════════════════════════════════════════════════════
+    // GLOBAL NEW-TAB / POPUP KILLER
+    // Cross-origin iframes can still open new tabs that we
+    // can't block. Solution: detect when focus leaves and
+    // immediately pull it back. Also track any window refs.
+    // ═══════════════════════════════════════════════════════
+    (function() {
+      // 1. Override window.open — catch anything in our own context
+      var realOpen = window.open;
+      var noop = function() {
+        // If somehow a reference is returned, close it
+        try {
+          var w = realOpen.apply(window, arguments);
+          if (w) { w.close(); }
+        } catch(e) {}
+        return null;
+      };
+      try {
+        Object.defineProperty(window, 'open', {
+          value: noop,
+          writable: false,
+          configurable: false
+        });
+      } catch(e) {
+        window.open = noop;
+      }
+
+      // 2. Block target="_blank" and external links at document level
+      document.addEventListener('click', function(e) {
+        var el = e.target;
+        while (el && el.tagName !== 'A') { el = el.parentElement; }
+        if (el && el.tagName === 'A') {
+          var target = el.getAttribute('target');
+          var href = el.getAttribute('href');
+          if (target === '_blank' || target === '_new') {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
+          }
+          if (href && href.startsWith('http') && !href.startsWith(window.location.origin)) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            return false;
+          }
+        }
+      }, true);
+
+      // 3. AUTO-CLOSE any new tabs that get opened by cross-origin iframes.
+      // Strategy: When our page becomes hidden (another tab took focus),
+      // use the Page Visibility API to detect it and refocus.
+      // Also try to close the offending tab via BroadcastChannel.
+      var isUserAction = false;
+      var userActionTimer = null;
+
+      // Track real user interactions (clicking inside our Flutter app, not the iframe)
+      document.addEventListener('mousedown', function() {
+        isUserAction = true;
+        clearTimeout(userActionTimer);
+        userActionTimer = setTimeout(function() { isUserAction = false; }, 1000);
+      });
+
+      // When visibility changes (new tab opened steals focus)
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden && !isUserAction) {
+          // A popup/new tab stole focus — bring us back
+          setTimeout(function() { window.focus(); }, 100);
+          setTimeout(function() { window.focus(); }, 300);
+          setTimeout(function() { window.focus(); }, 600);
+        }
+      });
+
+      // When window loses focus (blur) — aggressive refocus
+      window.addEventListener('blur', function() {
+        setTimeout(function() { window.focus(); }, 50);
+        setTimeout(function() { window.focus(); }, 200);
+        setTimeout(function() { window.focus(); }, 500);
+      });
+
+      // Periodic check: if we're not the active tab, reclaim focus
+      setInterval(function() {
+        if (document.hidden) {
+          window.focus();
+        }
+      }, 1000);
+
+      // 4. Block form submissions to new windows
+      document.addEventListener('submit', function(e) {
+        var form = e.target;
+        if (form && (form.target === '_blank' || form.target === '_new')) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      }, true);
+    })();
+  </script>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
