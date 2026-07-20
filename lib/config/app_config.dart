@@ -5,7 +5,7 @@ class AppConfig {
   // App Info
   // ──────────────────────────────────────────────
   static const String appName = 'Sports Arena';
-  static const String appVersion = '1.1.0';
+  static const String appVersion = '1.1.1';
 
   // ──────────────────────────────────────────────
   // API Path Configuration (structure stays the same, domain is user-provided)
@@ -29,4 +29,10 @@ class AppConfig {
   // ──────────────────────────────────────────────
   static const String domainStorageKey = 'api_domain';
   static const String onboardingCompleteKey = 'onboarding_complete';
+
+  // ──────────────────────────────────────────────
+  // Update Configuration
+  // ──────────────────────────────────────────────
+  static const String githubRepo = 'ajithrn/sports-arena';
+  static const String githubApiUrl = 'https://api.github.com/repos/ajithrn/sports-arena';
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -6,6 +7,7 @@ import '../../config/app_config.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/streams_provider.dart';
 import '../../services/domain_service.dart';
+import '../../services/update_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -427,8 +429,109 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text(AppConfig.appName),
             subtitle: Text('Version ${AppConfig.appVersion}'),
           ),
+          ListTile(
+            leading: const Icon(Icons.system_update),
+            title: const Text('Check for updates'),
+            subtitle: const Text('Download latest version from GitHub'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _checkForUpdate,
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _checkForUpdate() async {
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final updateInfo = await UpdateService.checkForUpdate();
+
+    if (!mounted) return;
+    Navigator.pop(context); // dismiss loading
+
+    if (updateInfo.hasUpdate) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Update Available'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('New version: ${updateInfo.latestVersion}'),
+              Text('Current: ${AppConfig.appVersion}'),
+              if (updateInfo.releaseNotes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('Release notes:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(
+                  updateInfo.releaseNotes,
+                  maxLines: 10,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Later'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _openDownloadUrl(updateInfo.downloadUrl);
+              },
+              child: const Text('Download'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You\'re on the latest version!'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _openDownloadUrl(String url) {
+    // On web, open in same window. On Android, use url_launcher or just show the URL.
+    if (kIsWeb) {
+      // Web: can't easily open URLs without url_launcher, show snackbar with URL
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Download: $url'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 10),
+        ),
+      );
+    } else {
+      // Android: show dialog with the download link
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Download Update'),
+          content: SelectableText(
+            url,
+            style: const TextStyle(fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }
