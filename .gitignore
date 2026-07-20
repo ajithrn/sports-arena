@@ -39,6 +39,10 @@ build/
 coverage/
 *.lcov
 
+# Tests and tools (not needed in repo)
+test/
+tool/
+
 # Misc
 *.log
 .env
