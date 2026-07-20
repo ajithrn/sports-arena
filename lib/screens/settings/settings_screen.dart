@@ -291,30 +291,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildThemeCard(SettingsProvider settings) {
     return Card(
-      child: Column(
-        children: [
-          RadioListTile<ThemeMode>(
-            title: const Text('Dark'),
-            secondary: const Icon(Icons.dark_mode),
-            value: ThemeMode.dark,
-            groupValue: settings.themeMode,
-            onChanged: (mode) => settings.setThemeMode(mode!),
-          ),
-          RadioListTile<ThemeMode>(
-            title: const Text('Light'),
-            secondary: const Icon(Icons.light_mode),
-            value: ThemeMode.light,
-            groupValue: settings.themeMode,
-            onChanged: (mode) => settings.setThemeMode(mode!),
-          ),
-          RadioListTile<ThemeMode>(
-            title: const Text('System'),
-            secondary: const Icon(Icons.settings_brightness),
-            value: ThemeMode.system,
-            groupValue: settings.themeMode,
-            onChanged: (mode) => settings.setThemeMode(mode!),
-          ),
-        ],
+      child: RadioGroup<ThemeMode>(
+        groupValue: settings.themeMode,
+        onChanged: (mode) => settings.setThemeMode(mode!),
+        child: Column(
+          children: [
+            RadioListTile<ThemeMode>(
+              title: const Text('Dark'),
+              secondary: const Icon(Icons.dark_mode),
+              value: ThemeMode.dark,
+            ),
+            RadioListTile<ThemeMode>(
+              title: const Text('Light'),
+              secondary: const Icon(Icons.light_mode),
+              value: ThemeMode.light,
+            ),
+            RadioListTile<ThemeMode>(
+              title: const Text('System'),
+              secondary: const Icon(Icons.settings_brightness),
+              value: ThemeMode.system,
+            ),
+          ],
+        ),
       ),
     );
   }

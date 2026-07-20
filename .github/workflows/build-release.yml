@@ -2,8 +2,8 @@ name: Build & Release APK
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -15,46 +15,74 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract version from pubspec.yaml
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+          echo "VERSION=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: v$VERSION"
+
+      - name: Check if tag already exists
+        id: tag_check
+        run: |
+          if git rev-parse "${{ steps.version.outputs.VERSION }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Skip if version already released
+        if: steps.tag_check.outputs.exists == 'true'
+        run: |
+          echo "Tag ${{ steps.version.outputs.VERSION }} already exists. Skipping build."
+          exit 0
+
       - name: Set up Java
+        if: steps.tag_check.outputs.exists == 'false'
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
       - name: Set up Flutter
+        if: steps.tag_check.outputs.exists == 'false'
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.5'
+          flutter-version: '3.44.6'
           channel: 'stable'
 
       - name: Get dependencies
+        if: steps.tag_check.outputs.exists == 'false'
         run: flutter pub get
 
       - name: Build release APK
+        if: steps.tag_check.outputs.exists == 'false'
         run: flutter build apk --release
 
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
       - name: Rename APK
-        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sports-arena-${{ steps.version.outputs.VERSION }}.apk
+        if: steps.tag_check.outputs.exists == 'false'
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sports-arena-${{ steps.version.outputs.VERSION }}.apk
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sports-arena-latest.apk
 
-      - name: Create Release
+      - name: Create tag and release
+        if: steps.tag_check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
           name: Sports Arena ${{ steps.version.outputs.VERSION }}
           body: |
             ## Sports Arena ${{ steps.version.outputs.VERSION }}
-            
+
             ### Downloads
             - **Android (Phone + TV):** Download the APK below and sideload
-            
+
             ### Install on Android TV / Fire Stick
             ```
             adb install sports-arena-${{ steps.version.outputs.VERSION }}.apk
             ```
           files: |
             build/app/outputs/flutter-apk/sports-arena-${{ steps.version.outputs.VERSION }}.apk
+            build/app/outputs/flutter-apk/sports-arena-latest.apk
           draft: false
           prerelease: false

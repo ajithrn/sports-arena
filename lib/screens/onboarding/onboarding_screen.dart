@@ -137,6 +137,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     // Domain text field
                     TextFormField(
                       controller: _domainController,
+                      autofocus: true,
                       decoration: InputDecoration(
                         labelText: 'Server domain',
                         hintText: 'example.com',

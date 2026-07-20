@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../providers/streams_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/stream_card.dart';
 import '../../widgets/loading_grid.dart';
 import '../../utils/platform_utils.dart';
-import '../../models/category_model.dart';
 import '../player/player_screen.dart';
 import '../settings/settings_screen.dart';
 
@@ -61,10 +61,20 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           _buildSortIconButton(),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => context.read<StreamsProvider>().refresh(),
-            tooltip: 'Refresh',
+          Consumer<StreamsProvider>(
+            builder: (context, provider, _) {
+              return IconButton(
+                icon: provider.isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                onPressed: provider.isLoading ? null : () => provider.refresh(),
+                tooltip: 'Refresh',
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.settings),
@@ -197,9 +207,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: '$label category, $count streams',
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
@@ -252,6 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -290,18 +308,46 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     if (provider.filteredStreams.isEmpty) {
+      final hasFilter = provider.selectedCategory != null;
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.sports, size: 64, color: Colors.grey),
+            Icon(
+              hasFilter ? Icons.filter_alt_off : Icons.sports,
+              size: 64,
+              color: Colors.grey,
+            ),
             const SizedBox(height: 16),
             Text(
-              'No streams available',
+              hasFilter
+                  ? 'No streams in this category'
+                  : 'No streams available',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            const Text('Check back later for live events'),
+            Text(
+              hasFilter
+                  ? 'Try selecting a different category or view all streams'
+                  : 'Check back later for live events',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            if (hasFilter)
+              FilledButton.tonalIcon(
+                onPressed: () => provider.selectCategory(null),
+                icon: const Icon(Icons.clear_all, size: 18),
+                label: const Text('Show all streams'),
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: () => provider.refresh(),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Refresh'),
+              ),
           ],
         ),
       );

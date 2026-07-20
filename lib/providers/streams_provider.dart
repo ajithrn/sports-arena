@@ -77,11 +77,19 @@ class StreamsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Load categories from API
+  /// Load categories from API, sorted by preferred display order
   Future<void> loadCategories() async {
     try {
       final categoryNames = await _apiService.getCategories();
       _categories = categoryNames.map((n) => SportCategory.fromName(n)).toList();
+      _categories.sort((a, b) {
+        final indexA = categoryDisplayOrder.indexOf(a.name);
+        final indexB = categoryDisplayOrder.indexOf(b.name);
+        // Categories not in the preferred list go to the end
+        final orderA = indexA == -1 ? categoryDisplayOrder.length : indexA;
+        final orderB = indexB == -1 ? categoryDisplayOrder.length : indexB;
+        return orderA.compareTo(orderB);
+      });
       notifyListeners();
     } catch (e) {
       _error = e.toString();

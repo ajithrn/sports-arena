@@ -38,6 +38,8 @@ class _SplashScreenState extends State<SplashScreen>
 
     final domainService = await DomainService.getInstance();
 
+    if (!mounted) return;
+
     if (domainService.isConfigured) {
       // Domain already set — go to home
       Navigator.of(context).pushReplacement(

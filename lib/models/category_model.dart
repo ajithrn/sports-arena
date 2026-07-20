@@ -1,5 +1,19 @@
 import 'package:flutter/material.dart';
 
+/// Preferred display order for categories.
+/// Categories not in this list will appear at the end in their original order.
+const List<String> categoryDisplayOrder = [
+  'soccer',      // Football
+  'cricket',     // Cricket
+  'racing',      // Racing
+  'tennis',      // Tennis
+  'basketball',  // Basketball
+  'hockey',      // Hockey
+  'combat',      // Combat
+  'baseball',    // Baseball
+  'football',    // Rugby
+];
+
 class SportCategory {
   final String name;
   final String displayName;

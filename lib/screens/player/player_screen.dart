@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/stream_model.dart';
+import '../../models/category_model.dart';
 import '../../utils/time_utils.dart';
 import 'player_widget.dart';
 
@@ -15,6 +17,8 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen> {
   bool _isFullscreen = false;
+  bool _showFullscreenHint = false;
+  Timer? _hintTimer;
 
   @override
   void initState() {
@@ -28,6 +32,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _hintTimer?.cancel();
     // Restore orientation
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -43,12 +48,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() {
       _isFullscreen = !_isFullscreen;
     });
+    HapticFeedback.mediumImpact();
     if (_isFullscreen) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
+      _showExitHint();
     } else {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       SystemChrome.setPreferredOrientations([
@@ -58,6 +65,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         DeviceOrientation.landscapeRight,
       ]);
     }
+  }
+
+  void _showExitHint() {
+    setState(() => _showFullscreenHint = true);
+    _hintTimer?.cancel();
+    _hintTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showFullscreenHint = false);
+    });
   }
 
   @override
@@ -72,9 +87,56 @@ class _PlayerScreenState extends State<PlayerScreen> {
         },
         child: Scaffold(
           backgroundColor: Colors.black,
-          body: GestureDetector(
+          body: Semantics(
+            label: 'Video player, double-tap to exit fullscreen',
+            child: GestureDetector(
             onDoubleTap: _toggleFullscreen,
-            child: PlayerWidget(embedUrl: widget.stream.embedUrl),
+            child: Stack(
+              children: [
+                PlayerWidget(embedUrl: widget.stream.embedUrl),
+                // Fullscreen exit hint overlay
+                if (_showFullscreenHint)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Center(
+                        child: AnimatedOpacity(
+                          opacity: _showFullscreenHint ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.75),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.touch_app,
+                                  color: Colors.white70,
+                                  size: 20,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Double-tap or press back to exit fullscreen',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
           ),
         ),
       );
@@ -147,8 +209,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
           const SizedBox(width: 12),
           Text(
-            widget.stream.category[0].toUpperCase() +
-                widget.stream.category.substring(1),
+            SportCategory.fromName(widget.stream.category).displayName,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const Spacer(),

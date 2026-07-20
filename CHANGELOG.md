@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.2.0 - 2026-07-20
+
+### Added
+- Fullscreen exit hint overlay (3-second pill: "Double-tap or press back to exit fullscreen")
+- Haptic feedback on category selection (lightImpact) and fullscreen toggle (mediumImpact)
+- Semantics/accessibility labels on category tabs, stream cards, and fullscreen player
+- Improved empty state with category-aware messaging and actionable buttons
+- Loading spinner on refresh button while streams are loading
+- Autofocus on domain text field for Android TV compatibility
+
+### Changed
+- Category display order: Football, Cricket, Racing, Tennis, Basketball, Hockey, Combat, Baseball, Rugby
+- Stream card badge and player info bar now show display names instead of raw API slugs
+- Migrated deprecated `RadioListTile` groupValue/onChanged to `RadioGroup` widget
+- Replaced deprecated `.withOpacity()` calls with `.withValues(alpha:)` in category chips
+- Replaced `__`/`___` unused params with `_` (Dart 3 wildcard syntax)
+- Added `mounted` guard after async gap in splash screen navigation
+
+### Fixed
+- Emulator GPU acceleration disabled causing frozen input (config: `hw.gpu.enabled=yes`, `hw.gpu.mode=host`)
+- Emulator snapshot corruption causing unresponsive touch (cleared snapshots, increased RAM to 4GB)
+- Android TV emulator keyboard input not working (`hw.keyboard=yes`)
+- All `flutter analyze` info-level deprecation warnings resolved (0 issues)
+
 ## 1.1.0 - 2025-07-20
 
 ### Added

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/stream_model.dart';
+import '../models/category_model.dart';
 import '../utils/time_utils.dart';
 
 class StreamCard extends StatelessWidget {
@@ -17,7 +18,10 @@ class StreamCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Semantics(
+      button: true,
+      label: '${stream.name}, ${stream.league}, ${stream.isLive ? "live now" : "upcoming"}, ${TimeUtils.formatViewers(stream.viewers)} viewers',
+      child: Card(
       clipBehavior: Clip.antiAlias,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -57,6 +61,7 @@ class StreamCard extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 
@@ -124,8 +129,8 @@ class StreamCard extends StatelessWidget {
           imageUrl: team.logo,
           width: isTvLayout ? 56 : 40,
           height: isTvLayout ? 56 : 40,
-          placeholder: (_, __) => const Icon(Icons.sports, size: 40),
-          errorWidget: (_, __, ___) => const Icon(Icons.sports, size: 40),
+          placeholder: (_, _) => const Icon(Icons.sports, size: 40),
+          errorWidget: (_, _, _) => const Icon(Icons.sports, size: 40),
         ),
         const SizedBox(height: 4),
         SizedBox(
@@ -146,11 +151,11 @@ class StreamCard extends StatelessWidget {
     return CachedNetworkImage(
       imageUrl: stream.thumbnailUrl,
       fit: BoxFit.cover,
-      placeholder: (_, __) => Container(
+      placeholder: (_, _) => Container(
         color: Colors.grey[800],
         child: const Center(child: Icon(Icons.live_tv, size: 48, color: Colors.white54)),
       ),
-      errorWidget: (_, __, ___) => Container(
+      errorWidget: (_, _, _) => Container(
         color: Colors.grey[800],
         child: const Center(child: Icon(Icons.live_tv, size: 48, color: Colors.white54)),
       ),
@@ -220,7 +225,7 @@ class StreamCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        stream.category[0].toUpperCase() + stream.category.substring(1),
+        SportCategory.fromName(stream.category).displayName,
         style: TextStyle(
           fontSize: 11,
           color: Theme.of(context).colorScheme.onPrimaryContainer,
