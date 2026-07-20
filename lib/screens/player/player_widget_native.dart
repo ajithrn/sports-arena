@@ -14,8 +14,9 @@ import '../../utils/platform_utils.dart';
 /// Windows: Uses WebView2 via webview_win_floating (implements webview_flutter API).
 class PlayerWidget extends StatefulWidget {
   final String embedUrl;
+  final VoidCallback? onDoubleTap;
 
-  const PlayerWidget({super.key, required this.embedUrl});
+  const PlayerWidget({super.key, required this.embedUrl, this.onDoubleTap});
 
   @override
   State<PlayerWidget> createState() => PlayerWidgetState();
@@ -377,6 +378,15 @@ class PlayerWidgetState extends State<PlayerWidget> {
               },
             ),
           ),
+          // Transparent overlay to detect double-tap for fullscreen toggle.
+          // Single taps pass through to the WebView via HitTestBehavior.translucent.
+          if (widget.onDoubleTap != null)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onDoubleTap: widget.onDoubleTap,
+              ),
+            ),
           if (_isLoading)
             IgnorePointer(
               child: Container(

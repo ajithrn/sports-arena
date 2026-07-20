@@ -10,8 +10,9 @@ import 'dart:async';
 /// Popup blocking is handled globally in index.html.
 class PlayerWidget extends StatefulWidget {
   final String embedUrl;
+  final VoidCallback? onDoubleTap;
 
-  const PlayerWidget({super.key, required this.embedUrl});
+  const PlayerWidget({super.key, required this.embedUrl, this.onDoubleTap});
 
   @override
   State<PlayerWidget> createState() => _PlayerWidgetState();

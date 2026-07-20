@@ -282,7 +282,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onDoubleTap: _toggleFullscreen,
             child: Stack(
               children: [
-                PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl),
+                PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
                 // Fullscreen exit hint overlay
                 if (_showFullscreenHint)
                   Positioned.fill(
@@ -343,7 +343,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             Positioned.fill(
               child: Container(
                 color: Colors.black,
-                child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl),
+                child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
               ),
             ),
             // Top overlay with back, title, info, fullscreen — auto-hides on TV

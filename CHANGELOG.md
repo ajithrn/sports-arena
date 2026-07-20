@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.4 - 2026-07-21
+
+### Fixed
+- **Double-tap fullscreen on mobile only goes portrait** — double-tap was triggering the WebView's native HTML5 fullscreen (portrait-only) instead of Flutter's fullscreen with landscape orientation and immersive mode
+- Double-tap to enter/exit fullscreen now correctly forces landscape + immersive sticky mode (same as the fullscreen button)
+
+### Changed
+- `PlayerWidget` now accepts `onDoubleTap` callback, used by `PlayerScreen` to handle fullscreen toggle at the Flutter level
+- Added transparent gesture overlay on Android WebView to intercept double-tap before it reaches the iframe
+- Updated dependencies: `intl` 0.19→0.20.3, `permission_handler` 11.4→12.0.3, `window_manager` 0.4.3→0.5.2
+
 ## 1.3.3 - 2026-07-21
 
 ### Added
