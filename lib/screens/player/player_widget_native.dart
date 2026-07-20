@@ -24,9 +24,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
   late final WebViewController _controller;
   bool _isLoading = true;
 
-  bool get _isDesktop =>
-      defaultTargetPlatform == TargetPlatform.macOS ||
-      defaultTargetPlatform == TargetPlatform.windows;
+  bool get _isDesktop => PlatformUtils.isDesktop;
 
   @override
   void initState() {
@@ -265,36 +263,32 @@ class PlayerWidgetState extends State<PlayerWidget> {
       );
     }
 
-    // Android: use hybrid composition for mobile, texture mode for TV
-    final useHybrid = !PlatformUtils.isTv;
-
+    // Android: always use Hybrid Composition for proper input handling
+    // (needed for D-pad/remote to interact with iframe content on TV)
     return Container(
       color: Colors.black,
       child: Stack(
         children: [
-          if (useHybrid)
-            WebViewWidget.fromPlatformCreationParams(
-              params: AndroidWebViewWidgetCreationParams(
-                controller: _controller.platform,
-                displayWithHybridComposition: true,
-                gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                  Factory<VerticalDragGestureRecognizer>(
-                    () => VerticalDragGestureRecognizer(),
-                  ),
-                  Factory<HorizontalDragGestureRecognizer>(
-                    () => HorizontalDragGestureRecognizer(),
-                  ),
-                  Factory<TapGestureRecognizer>(
-                    () => TapGestureRecognizer(),
-                  ),
-                  Factory<LongPressGestureRecognizer>(
-                    () => LongPressGestureRecognizer(),
-                  ),
-                },
-              ),
-            )
-          else
-            WebViewWidget(controller: _controller),
+          WebViewWidget.fromPlatformCreationParams(
+            params: AndroidWebViewWidgetCreationParams(
+              controller: _controller.platform,
+              displayWithHybridComposition: true,
+              gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                Factory<VerticalDragGestureRecognizer>(
+                  () => VerticalDragGestureRecognizer(),
+                ),
+                Factory<HorizontalDragGestureRecognizer>(
+                  () => HorizontalDragGestureRecognizer(),
+                ),
+                Factory<TapGestureRecognizer>(
+                  () => TapGestureRecognizer(),
+                ),
+                Factory<LongPressGestureRecognizer>(
+                  () => LongPressGestureRecognizer(),
+                ),
+              },
+            ),
+          ),
           if (_isLoading)
             IgnorePointer(
               child: Container(

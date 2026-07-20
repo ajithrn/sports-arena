@@ -1,12 +1,10 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../utils/platform_utils.dart';
 
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
 
-  bool get _isDesktop =>
-      defaultTargetPlatform == TargetPlatform.macOS ||
-      defaultTargetPlatform == TargetPlatform.windows;
+  bool get _isDesktop => PlatformUtils.isDesktop;
 
   @override
   Widget build(BuildContext context) {

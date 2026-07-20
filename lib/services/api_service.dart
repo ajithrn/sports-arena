@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 import '../models/stream_model.dart';
@@ -10,9 +12,28 @@ class ApiService {
   // Simple in-memory cache
   final Map<String, _CacheEntry> _cache = {};
 
+  /// HTTP timeout for all requests
+  static const _timeout = Duration(seconds: 10);
+
   ApiService(this._domainService);
 
   String get _baseUrl => _domainService.apiBaseUrl;
+
+  /// Common headers for all requests
+  Map<String, String> get _headers => {
+        'User-Agent': _userAgent,
+        'Accept': 'application/json',
+      };
+
+  String get _userAgent {
+    if (kIsWeb) return 'SportsArena/${AppConfig.appVersion} (Web)';
+    final platform = defaultTargetPlatform.name;
+    try {
+      return 'SportsArena/${AppConfig.appVersion} ($platform; ${Platform.operatingSystemVersion})';
+    } catch (_) {
+      return 'SportsArena/${AppConfig.appVersion} ($platform)';
+    }
+  }
 
   /// Fetch all live streams, optionally filtered by category
   Future<List<SportStream>> getStreams({String? category}) async {
@@ -25,7 +46,9 @@ class ApiService {
       url += '?category=$category';
     }
 
-    final response = await http.get(Uri.parse(url));
+    final response = await http
+        .get(Uri.parse(url), headers: _headers)
+        .timeout(_timeout);
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
       final streams = (data['streams'] as List)
@@ -44,7 +67,9 @@ class ApiService {
     if (cached != null) return cached as SportStream;
 
     final url = '$_baseUrl${AppConfig.streamsPath}/$streamKey';
-    final response = await http.get(Uri.parse(url));
+    final response = await http
+        .get(Uri.parse(url), headers: _headers)
+        .timeout(_timeout);
 
     if (response.statusCode == 200) {
       final stream = SportStream.fromJson(json.decode(response.body));
@@ -63,7 +88,9 @@ class ApiService {
     if (cached != null) return cached as List<String>;
 
     final url = '$_baseUrl${AppConfig.categoriesPath}';
-    final response = await http.get(Uri.parse(url));
+    final response = await http
+        .get(Uri.parse(url), headers: _headers)
+        .timeout(_timeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -78,9 +105,9 @@ class ApiService {
   Future<bool> testConnection() async {
     try {
       final url = '$_baseUrl${AppConfig.categoriesPath}';
-      final response = await http.get(Uri.parse(url)).timeout(
-        const Duration(seconds: 10),
-      );
+      final response = await http
+          .get(Uri.parse(url), headers: _headers)
+          .timeout(_timeout);
       return response.statusCode == 200;
     } catch (e) {
       return false;

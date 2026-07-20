@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
 import '../../services/domain_service.dart';
+import '../../utils/platform_utils.dart';
 import '../home/home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -231,8 +231,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _buildQuickTips(BuildContext context) {
-    final isDesktop = defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.windows;
+    final isDesktop = PlatformUtils.isDesktop;
 
     final tips = isDesktop
         ? [

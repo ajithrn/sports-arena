@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +18,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  Timer? _autoRefreshTimer;
+  DateTime? _lastRefresh;
+
   @override
   void initState() {
     super.initState();
@@ -25,10 +29,48 @@ class _HomeScreenState extends State<HomeScreen> {
       final settings = context.read<SettingsProvider>();
       provider.loadCategories();
       provider.loadStreams();
+      _lastRefresh = DateTime.now();
       if (settings.defaultCategory != null) {
         provider.selectCategory(settings.defaultCategory);
       }
+      _setupAutoRefresh(settings);
     });
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _setupAutoRefresh(SettingsProvider settings) {
+    _autoRefreshTimer?.cancel();
+    if (!settings.autoRefresh) return;
+
+    _autoRefreshTimer = Timer.periodic(
+      Duration(seconds: settings.refreshIntervalSeconds),
+      (_) {
+        if (!mounted) return;
+        final provider = context.read<StreamsProvider>();
+        if (!provider.isLoading) {
+          provider.refresh();
+          _lastRefresh = DateTime.now();
+        }
+      },
+    );
+  }
+
+  /// Debounced manual refresh — prevents spamming within 5 seconds
+  void _handleManualRefresh() {
+    if (_lastRefresh != null &&
+        DateTime.now().difference(_lastRefresh!).inSeconds < 5) {
+      return; // Cooldown active
+    }
+    final provider = context.read<StreamsProvider>();
+    if (!provider.isLoading) {
+      provider.refresh();
+      _lastRefresh = DateTime.now();
+    }
   }
 
   @override
@@ -63,6 +105,15 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildSortIconButton(),
           Consumer<StreamsProvider>(
             builder: (context, provider, _) {
+              String tooltip = 'Refresh';
+              if (_lastRefresh != null) {
+                final ago = DateTime.now().difference(_lastRefresh!).inSeconds;
+                if (ago < 60) {
+                  tooltip = 'Updated ${ago}s ago';
+                } else {
+                  tooltip = 'Updated ${ago ~/ 60}m ago';
+                }
+              }
               return IconButton(
                 icon: provider.isLoading
                     ? const SizedBox(
@@ -71,17 +122,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.refresh),
-                onPressed: provider.isLoading ? null : () => provider.refresh(),
-                tooltip: 'Refresh',
+                onPressed: provider.isLoading ? null : _handleManualRefresh,
+                tooltip: tooltip,
               );
             },
           ),
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.of(context).push(
+            onPressed: () async {
+              final settings = context.read<SettingsProvider>();
+              await Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const SettingsScreen()),
               );
+              // Re-setup auto-refresh in case settings changed
+              if (mounted) {
+                _setupAutoRefresh(settings);
+              }
             },
             tooltip: 'Settings',
           ),
@@ -91,11 +147,24 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, provider, child) {
           return Column(
             children: [
+              // Connection error banner
+              if (provider.error != null && !provider.isLoading)
+                MaterialBanner(
+                  content: const Text('Unable to connect to server'),
+                  leading: const Icon(Icons.wifi_off, color: Colors.orange),
+                  backgroundColor: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3),
+                  actions: [
+                    TextButton(
+                      onPressed: _handleManualRefresh,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
               // Category bar
               _buildCategoryBar(provider),
               // Stream grid
               Expanded(
-                child: _buildContent(provider, crossAxisCount, isTv),
+                child: _buildContent(provider, crossAxisCount, isTv, screenWidth),
               ),
             ],
           );
@@ -307,6 +376,7 @@ class _HomeScreenState extends State<HomeScreen> {
     StreamsProvider provider,
     int crossAxisCount,
     bool isTv,
+    double screenWidth,
   ) {
     if (provider.isLoading) {
       return LoadingGrid(crossAxisCount: crossAxisCount);
@@ -382,6 +452,13 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+    // Calculate card height dynamically based on available width
+    final gridWidth = screenWidth - 32 - (crossAxisCount - 1) * 12; // padding + gaps
+    final cardWidth = gridWidth / crossAxisCount;
+    final thumbnailHeight = cardWidth * 9 / 16; // 16:9
+    final infoHeight = isTv ? 100.0 : 90.0; // text (up to 2 lines) + badge + padding
+    final cardHeight = thumbnailHeight + infoHeight;
+
     return RefreshIndicator(
       onRefresh: () => provider.refresh(),
       child: GridView.builder(
@@ -390,7 +467,7 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisCount: crossAxisCount,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: isTv ? 1.0 : 0.85,
+          mainAxisExtent: cardHeight,
         ),
         itemCount: provider.filteredStreams.length,
         itemBuilder: (context, index) {

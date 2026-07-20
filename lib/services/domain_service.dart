@@ -58,25 +58,4 @@ class DomainService {
     await _prefs.remove(AppConfig.onboardingCompleteKey);
   }
 
-  /// Validate a domain by testing the categories endpoint
-  Future<bool> validateDomain(String domain) async {
-    try {
-      String normalized = domain.trim();
-      if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-        normalized = 'https://$normalized';
-      }
-      if (normalized.endsWith('/')) {
-        normalized = normalized.substring(0, normalized.length - 1);
-      }
-
-      final url = '$normalized${AppConfig.apiVersionPath}${AppConfig.categoriesPath}';
-      final uri = Uri.parse(url);
-
-      // We just need to check if the URL is parseable and reachable
-      // The actual HTTP call will be done by the ApiService
-      return uri.hasScheme && uri.host.isNotEmpty;
-    } catch (e) {
-      return false;
-    }
-  }
 }

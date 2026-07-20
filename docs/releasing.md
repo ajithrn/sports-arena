@@ -11,13 +11,13 @@ A GitHub Actions workflow at `.github/workflows/build-release.yml` automatically
 3. **Commit and push** to `main`
 
 ```bash
-# Example: releasing v1.3.0
-# 1. Edit pubspec.yaml → version: 1.3.0+6
-# 2. Edit lib/config/app_config.dart → appVersion = '1.3.0'
+# Example: releasing vX.Y.Z
+# 1. Edit pubspec.yaml → version: X.Y.Z+N
+# 2. Edit lib/config/app_config.dart → appVersion = 'X.Y.Z'
 # 3. Update CHANGELOG.md
 
 git add -A
-git commit -m "release: v1.3.0 - desktop platform support"
+git commit -m "release: vX.Y.Z - description of changes"
 git push origin main
 ```
 
@@ -26,22 +26,22 @@ GitHub Actions will then:
 - Build Android APK on `ubuntu-latest`
 - Build macOS DMG on `macos-latest`
 - Build Windows ZIP on `windows-latest`
-- Create a GitHub Release named "Sports Arena v1.3.0"
+- Create a GitHub Release named "Sports Arena vX.Y.Z"
 - Attach all platform artifacts
 
 ### Artifacts produced:
 
 | Platform | Artifact |
 |----------|----------|
-| Android | `sports-arena-v1.3.0.apk`, `sports-arena-latest.apk` |
-| macOS | `sports-arena-v1.3.0-macos.dmg` |
-| Windows | `sports-arena-v1.3.0-windows.zip` |
+| Android | `sports-arena-vX.Y.Z.apk`, `sports-arena-latest.apk` |
+| macOS | `sports-arena-vX.Y.Z-macos.dmg` |
+| Windows | `sports-arena-vX.Y.Z-windows.zip` |
 
 ### Manual Release (if Actions are down)
 
 1. Build locally for your platform (see [deployment.md](deployment.md))
 2. Go to https://github.com/ajithrn/sports-arena/releases/new
-3. Create a new tag (e.g., `v1.3.0`)
+3. Create a new tag (e.g., `vX.Y.Z`)
 4. Upload the built artifacts
 5. Publish
 

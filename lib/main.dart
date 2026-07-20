@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -13,9 +12,7 @@ void main() async {
   await PlatformUtils.init();
 
   // Initialize window_manager for desktop platforms
-  if (defaultTargetPlatform == TargetPlatform.macOS ||
-      defaultTargetPlatform == TargetPlatform.windows ||
-      defaultTargetPlatform == TargetPlatform.linux) {
+  if (PlatformUtils.isDesktop) {
     await windowManager.ensureInitialized();
     const windowOptions = WindowOptions(
       size: Size(1100, 750),

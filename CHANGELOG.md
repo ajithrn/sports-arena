@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.3.1 - 2026-07-20
+
+### Added
+- Connection error banner on home screen when server is unreachable
+- "Updated Xs ago" tooltip on refresh button
+- Auto-refresh timer that respects settings interval (30s/60s/2min/5min)
+- Refresh button debounce (5s cooldown prevents spamming)
+- Custom User-Agent header on all API requests (identifies app version + platform)
+- `PlatformUtils.isDesktop` centralized helper
+
+### Changed
+- Splash screen loads faster for returning users (800ms vs 2s)
+- All API calls now have 10-second timeout (prevents infinite hangs)
+- Inline desktop platform checks replaced with `PlatformUtils.isDesktop`
+- Auto-refresh timer restarts when returning from settings
+- Android TV uses Hybrid Composition WebView (fixes D-pad interaction with iframe player)
+- TV banner icon updated to proper 320x180 Leanback banner
+- Update download opens in system browser via `url_launcher`
+- Update service picks correct platform asset (APK/DMG/ZIP)
+
+### Fixed
+- Android TV D-pad unable to click play button inside iframe (texture mode → Hybrid Composition)
+- Android TV showing square icon instead of wide banner in launcher
+- Update "Download" button not actually downloading anything
+- Dead code: removed unused `DomainService.validateDomain()` method
+- Removed unused `foundation.dart` imports across multiple files
+
+### Code Quality
+- Centralized platform detection in `PlatformUtils` (isWeb, isAndroid, isDesktop, isTv)
+- Removed dead/misleading code
+- Consistent import patterns
+
 ## 1.3.0 - 2026-07-20
 
 ### Added

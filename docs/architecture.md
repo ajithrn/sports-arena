@@ -44,7 +44,7 @@ lib/
 │   ├── category_chip.dart             # Category filter chip (unused, replaced)
 │   └── loading_grid.dart              # Shimmer loading skeleton
 └── utils/
-    ├── platform_utils.dart            # Web/Android/TV detection
+    ├── platform_utils.dart            # Web/Android/Desktop/TV detection
     └── time_utils.dart                # Time formatting, viewer count
 ```
 
@@ -62,6 +62,10 @@ User enters domain → DomainService saves it
 - Streams: cached in-memory for 60 seconds
 - Categories: cached in-memory for 300 seconds
 - Cache is cleared on manual refresh or server change
+- All API requests have a 10-second timeout
+- Custom User-Agent header identifies app version and platform
+- Auto-refresh timer runs in background (configurable interval)
+- Manual refresh has 5-second debounce cooldown
 
 ## Platform-Specific Behavior
 
@@ -80,10 +84,12 @@ User enters domain → DomainService saves it
 
 ### Android TV
 - Detected via platform channel (`UiModeManager`)
-- Uses lighter texture WebView mode (not Hybrid Composition)
+- Hybrid Composition WebView for proper D-pad interaction with iframe content
 - Larger grid (4 columns), bigger cards
-- D-pad friendly layout
-- Leanback launcher intent in AndroidManifest
+- D-pad navigation with visible focus highlights (glow + border)
+- Remote Select/Enter triggers play, media keys supported
+- Leanback launcher with proper 320x180 banner icon
+- Aggressive autoplay with multiple retry attempts
 
 ### macOS
 - Player uses `webview_flutter_wkwebview` (WKWebView)

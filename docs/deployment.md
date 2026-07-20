@@ -18,7 +18,7 @@ On every push to `main`, the workflow:
 # 1. Bump version in pubspec.yaml AND lib/config/app_config.dart
 # 2. Commit and push to main
 
-git add -A && git commit -m "release: v1.3.0"
+git add -A && git commit -m "release: v1.3.1"
 git push origin main
 ```
 
@@ -91,8 +91,8 @@ Or use the Downloader app with code: `9563542`
 
 Format: `major.minor.patch+build`
 
-- `pubspec.yaml` — `version: 1.3.0+6`
-- `lib/config/app_config.dart` — `appVersion = '1.3.0'`
+- `pubspec.yaml` — `version: X.Y.Z+N`
+- `lib/config/app_config.dart` — `appVersion = 'X.Y.Z'`
 
 Both must be updated together before pushing.
 

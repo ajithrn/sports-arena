@@ -32,21 +32,23 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkAndNavigate() async {
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (!mounted) return;
-
     final domainService = await DomainService.getInstance();
+
+    if (domainService.isConfigured) {
+      // Already configured — short delay for branding, then go to home
+      await Future.delayed(const Duration(milliseconds: 800));
+    } else {
+      // First time — show splash a bit longer
+      await Future.delayed(const Duration(seconds: 2));
+    }
 
     if (!mounted) return;
 
     if (domainService.isConfigured) {
-      // Domain already set — go to home
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     } else {
-      // First time — show onboarding
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const OnboardingScreen()),
       );
