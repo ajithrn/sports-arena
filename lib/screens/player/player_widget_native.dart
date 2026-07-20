@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import '../../utils/platform_utils.dart';
 
 /// Player widget for native platforms (Android, macOS, Windows).
-/// Android Mobile: Uses Hybrid Composition for proper touch handling.
-/// Android TV: Uses default texture mode (lighter) since TV uses D-pad, not touch.
+/// Android: Uses Hybrid Composition so the WebView receives real touch/D-pad events.
+/// On TV, a native MotionEvent is dispatched via platform channel for play/pause.
 /// macOS: Uses WKWebView with inline media playback enabled.
 /// Windows: Uses WebView2 via webview_win_floating (implements webview_flutter API).
 class PlayerWidget extends StatefulWidget {
@@ -78,6 +79,9 @@ class PlayerWidgetState extends State<PlayerWidget> {
             if (mounted) setState(() => _isLoading = false);
             _injectPopupBlocker();
             _injectAutoplay();
+            if (PlatformUtils.isTv) {
+              _injectTvKeyboardHandler();
+            }
           },
           onWebResourceError: (error) {
             debugPrint('WebView error: ${error.description} (${error.errorCode})');
@@ -131,6 +135,33 @@ class PlayerWidgetState extends State<PlayerWidget> {
     final isTv = PlatformUtils.isTv;
     _controller.runJavaScript('''
       (function() {
+        function simulateTouch(el) {
+          var rect = el.getBoundingClientRect();
+          var cx = rect.left + rect.width / 2;
+          var cy = rect.top + rect.height / 2;
+          try {
+            var touchObj = new Touch({
+              identifier: Date.now(),
+              target: el,
+              clientX: cx,
+              clientY: cy,
+              radiusX: 2.5,
+              radiusY: 2.5,
+              rotationAngle: 0,
+              force: 0.5
+            });
+            el.dispatchEvent(new TouchEvent('touchstart', {
+              cancelable: true, bubbles: true,
+              touches: [touchObj], targetTouches: [touchObj], changedTouches: [touchObj]
+            }));
+            el.dispatchEvent(new TouchEvent('touchend', {
+              cancelable: true, bubbles: true,
+              touches: [], targetTouches: [], changedTouches: [touchObj]
+            }));
+          } catch(e) {}
+          el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, clientX: cx, clientY: cy}));
+        }
+
         function tryPlay() {
           // Try direct video element
           var video = document.querySelector('video');
@@ -154,7 +185,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
           ];
           for (var i = 0; i < selectors.length; i++) {
             var btn = document.querySelector(selectors[i]);
-            if (btn) { btn.click(); return true; }
+            if (btn) { simulateTouch(btn); return true; }
           }
           // Try clicking center of viewport (common for overlay play buttons)
           var buttons = document.querySelectorAll('button, [role="button"], div[onclick], a');
@@ -164,7 +195,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
             var cy = window.innerHeight / 2;
             if (Math.abs(rect.left + rect.width/2 - cx) < 200 &&
                 Math.abs(rect.top + rect.height/2 - cy) < 200) {
-              buttons[i].click();
+              simulateTouch(buttons[i]);
               return true;
             }
           }
@@ -186,28 +217,48 @@ class PlayerWidgetState extends State<PlayerWidget> {
         '''}
       })();
     ''');
+
+    // On TV, also try native tap (trusted event) after delays
+    if (isTv && defaultTargetPlatform == TargetPlatform.android) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) _platform.invokeMethod<bool>('tapWebViewCenter');
+      });
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted) _platform.invokeMethod<bool>('tapWebViewCenter');
+      });
+      Future.delayed(const Duration(seconds: 7), () {
+        if (mounted) _platform.invokeMethod<bool>('tapWebViewCenter');
+      });
+    }
   }
 
-  /// Simulate a click in the center of the WebView (for TV D-pad select)
-  void simulateCenterClick() {
+  /// Platform channel for dispatching native touch events
+  static const _platform = MethodChannel('com.sportsarena/platform');
+
+  /// Simulate a click in the center of the WebView (for TV D-pad select).
+  /// On Android, dispatches a native MotionEvent via platform channel (trusted tap).
+  /// Falls back to JavaScript video.play()/pause() on other platforms.
+  void simulateCenterClick() async {
+    // On Android, use native tap (produces a trusted OS-level touch event)
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        final result = await _platform.invokeMethod<bool>('tapWebViewCenter');
+        if (result == true) return;
+      } catch (_) {}
+    }
+
+    // Fallback: try to play/pause video directly via JS
     _controller.runJavaScript('''
       (function() {
-        // First try to find and click play button
         var video = document.querySelector('video');
         if (video && video.paused) { video.play().catch(function(){}); return; }
         if (video && !video.paused) { video.pause(); return; }
 
-        // Click the center of the page
+        // Click the center element as last resort
         var cx = window.innerWidth / 2;
         var cy = window.innerHeight / 2;
         var el = document.elementFromPoint(cx, cy);
-        if (el) {
-          el.click();
-          // Also dispatch pointer events for players that listen to those
-          el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, clientX: cx, clientY: cy}));
-          el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, clientX: cx, clientY: cy}));
-          el.dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: cx, clientY: cy}));
-        }
+        if (el) { el.click(); }
       })();
     ''');
   }
@@ -234,6 +285,43 @@ class PlayerWidgetState extends State<PlayerWidget> {
               e.stopImmediatePropagation();
               return false;
             }
+          }
+        }, true);
+      })();
+    ''');
+  }
+
+  /// Injects a keyboard handler into the WebView page so that when the
+  /// WebView has platform focus on TV, Enter/Space triggers play/pause.
+  void _injectTvKeyboardHandler() {
+    _controller.runJavaScript('''
+      (function() {
+        if (window.__tvKeyHandlerInstalled) return;
+        window.__tvKeyHandlerInstalled = true;
+
+        // Make body focusable so it can receive key events
+        document.body.setAttribute('tabindex', '0');
+        document.body.focus();
+
+        document.addEventListener('keydown', function(e) {
+          // Enter (13), Space (32), MediaPlayPause (179)
+          if (e.keyCode === 13 || e.keyCode === 32 || e.keyCode === 179) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Try to play/pause video directly
+            var video = document.querySelector('video');
+            if (video) {
+              if (video.paused) { video.play().catch(function(){}); }
+              else { video.pause(); }
+              return;
+            }
+
+            // Click the center element (play button overlay)
+            var cx = window.innerWidth / 2;
+            var cy = window.innerHeight / 2;
+            var el = document.elementFromPoint(cx, cy);
+            if (el) { el.click(); }
           }
         }, true);
       })();

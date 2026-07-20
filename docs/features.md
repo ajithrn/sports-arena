@@ -16,12 +16,15 @@
 - Fullscreen mode:
   - Mobile: tap icon or double-tap, back button to exit
   - Desktop: press F, Esc to exit, Cmd/Ctrl+F, or double-click
+  - TV: D-pad right to focus fullscreen button, Enter to toggle
 - Native window fullscreen on macOS/Windows with proper size restore
 - Auto-play injection (attempts to click play button automatically)
-- Info bar showing league, category, and LIVE badge
-- Viewer count display
+- Streaming-app style overlay: gradient top bar with back, title, viewers, LIVE, fullscreen
+- Overlay auto-hides after 5s on TV, always visible on mobile/desktop
+- Viewer count and LIVE indicator in player top bar
 - Player state preserved across fullscreen toggle (no reload)
 - Video stops automatically when navigating back
+- Native MotionEvent tap on Android TV for trusted play/pause interaction
 
 ## Ad/Popup Blocking
 - **Web**: Global JavaScript in index.html overrides window.open, blocks _blank links, auto-refocuses if a new tab steals focus
@@ -54,9 +57,16 @@
 - TV detection via platform channel (UiModeManager)
 - Adapted layout with larger cards and 4-column grid
 - Hybrid Composition WebView for proper D-pad interaction with iframe content
-- D-pad navigation with visible focus highlights (glow + border)
-- Remote Select/Enter triggers play, media keys supported
-- Aggressive autoplay with multiple retry attempts
+- Native `MotionEvent` dispatch via platform channel for trusted tap-to-play (bypasses autoplay restrictions)
+- Player overlay UI: gradient top bar with back, title, viewers, LIVE, fullscreen
+- Overlay auto-hides after 5s inactivity, reappears on any remote press
+- D-pad focus navigation between Back and Fullscreen buttons (Left/Right to move, Enter to activate)
+- Buttons invisible at rest, show dark bg + white border ring on D-pad focus
+- Remote Select/Enter triggers play/pause when no button is focused
+- Media keys (play/pause/stop) supported
+- Aggressive autoplay with native taps + JS injection retries
+- Exit confirmation dialog on home screen back button press
+- JavaScript keyboard handler injected into WebView for Enter/Space play/pause
 
 ## Desktop Support (macOS & Windows)
 - Native window management with customizable size (1100x750 default, 800x600 minimum)

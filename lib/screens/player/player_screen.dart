@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../models/stream_model.dart';
-import '../../models/category_model.dart';
 import '../../utils/platform_utils.dart';
 import '../../utils/time_utils.dart';
 import 'player_widget.dart';
@@ -20,30 +19,58 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   bool _isFullscreen = false;
   bool _showFullscreenHint = false;
+  bool _showOverlay = true;
   Timer? _hintTimer;
+  Timer? _overlayTimer;
   Size? _savedWindowSize;
   Offset? _savedWindowPosition;
   final _playerKey = GlobalKey();
+  final _backFocusNode = FocusNode(debugLabel: 'Back Button');
+  final _fullscreenFocusNode = FocusNode(debugLabel: 'Fullscreen Button');
 
   @override
   void initState() {
     super.initState();
-    // Register hardware keyboard listener for TV remote and desktop shortcuts
+    // Register hardware keyboard listener for desktop shortcuts and TV remote.
+    // On TV, we intercept Enter/Select to dispatch a native tap to the WebView
+    // (producing a trusted MotionEvent that satisfies autoplay policies).
     if (_isDesktop || PlatformUtils.isTv) {
       HardwareKeyboard.instance.addHandler(_hardwareKeyHandler);
     }
+    _startOverlayTimer();
   }
 
   /// Hardware key handler that works even when WebView has platform focus
   bool _hardwareKeyHandler(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
+    // Any key press shows the overlay
+    _showOverlayAndResetTimer();
     final result = _handleKeyEvent(FocusNode(), event);
     return result == KeyEventResult.handled;
+  }
+
+  void _startOverlayTimer() {
+    // Only auto-hide on TV
+    if (!PlatformUtils.isTv) return;
+    _overlayTimer?.cancel();
+    _overlayTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _showOverlay = false);
+    });
+  }
+
+  void _showOverlayAndResetTimer() {
+    if (!_showOverlay && mounted) {
+      setState(() => _showOverlay = true);
+    }
+    _startOverlayTimer();
   }
 
   @override
   void dispose() {
     _hintTimer?.cancel();
+    _overlayTimer?.cancel();
+    _backFocusNode.dispose();
+    _fullscreenFocusNode.dispose();
     if (_isDesktop || PlatformUtils.isTv) {
       HardwareKeyboard.instance.removeHandler(_hardwareKeyHandler);
     }
@@ -134,7 +161,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     final key = event.logicalKey;
 
-    // Android TV: D-pad center / Select / Enter / Media keys → simulate click in player
+    // Android TV: Intercept D-pad center/Enter/Select to dispatch a native
+    // trusted tap to the WebView via platform channel.
     if (PlatformUtils.isTv) {
       if (key == LogicalKeyboardKey.select ||
           key == LogicalKeyboardKey.enter ||
@@ -143,13 +171,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
           key == LogicalKeyboardKey.mediaPlayPause ||
           key == LogicalKeyboardKey.mediaPlay ||
           key == LogicalKeyboardKey.space) {
-        _simulatePlayerClick();
-        return KeyEventResult.handled;
+        // Only trigger play/pause if no button is currently focused
+        if (!_backFocusNode.hasFocus && !_fullscreenFocusNode.hasFocus) {
+          _simulatePlayerClick();
+          return KeyEventResult.handled;
+        }
+        // If a button is focused, let the Focus onKeyEvent handle it
+        return KeyEventResult.ignored;
       }
-      // Media stop
       if (key == LogicalKeyboardKey.mediaStop ||
           key == LogicalKeyboardKey.mediaPause) {
         _simulatePlayerClick();
+        return KeyEventResult.handled;
+      }
+      // D-pad arrows: manually handle focus movement between buttons
+      if (key == LogicalKeyboardKey.arrowLeft ||
+          key == LogicalKeyboardKey.arrowRight ||
+          key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.arrowDown) {
+        if (!_backFocusNode.hasFocus && !_fullscreenFocusNode.hasFocus) {
+          // Nothing focused — first press focuses fullscreen
+          _fullscreenFocusNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        // Move between buttons
+        if (key == LogicalKeyboardKey.arrowLeft) {
+          if (_fullscreenFocusNode.hasFocus) {
+            _backFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+        }
+        if (key == LogicalKeyboardKey.arrowRight) {
+          if (_backFocusNode.hasFocus) {
+            _fullscreenFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+        }
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -197,6 +254,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } catch (_) {
         // Web platform doesn't support this
       }
+    }
+    // After native tap, the WebView platform view grabs Android focus.
+    // Show the overlay so user knows they can navigate, but don't force focus
+    // on any button — let user initiate with D-pad.
+    if (PlatformUtils.isTv) {
+      _showOverlayAndResetTimer();
     }
   }
 
@@ -271,103 +334,172 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else {
       screen = Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Text(
-          widget.stream.name,
-          style: const TextStyle(fontSize: 16),
-        ),
-        actions: [
-          if (widget.stream.viewers > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.visibility, size: 16),
-                  const SizedBox(width: 4),
-                  Text(TimeUtils.formatViewers(widget.stream.viewers)),
-                ],
+      body: GestureDetector(
+        onTap: _showOverlayAndResetTimer,
+        behavior: HitTestBehavior.translucent,
+        child: Stack(
+          children: [
+            // Player takes full space
+            Positioned.fill(
+              child: Container(
+                color: Colors.black,
+                child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl),
               ),
             ),
-          IconButton(
-            icon: const Icon(Icons.fullscreen),
-            onPressed: _toggleFullscreen,
-            tooltip: 'Fullscreen (F)',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Player - takes most of the space
-          Expanded(
-            child: Container(
-              color: Colors.black,
-              child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl),
+            // Top overlay with back, title, info, fullscreen — auto-hides on TV
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: IgnorePointer(
+                ignoring: !_showOverlay,
+                child: AnimatedOpacity(
+                  opacity: _showOverlay ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Container(
+                    padding: EdgeInsets.only(
+                      top: MediaQuery.of(context).padding.top + 8,
+                      left: 8,
+                      right: 8,
+                      bottom: 20,
+                    ),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black87,
+                          Colors.black45,
+                          Colors.transparent,
+                        ],
+                        stops: [0.0, 0.6, 1.0],
+                      ),
+                    ),
+                    child: FocusTraversalGroup(
+                      policy: OrderedTraversalPolicy(),
+                      child: Row(
+                        children: [
+                          _buildFocusableButton(
+                            icon: Icons.arrow_back,
+                            onPressed: () => Navigator.of(context).pop(),
+                            tooltip: 'Back',
+                            focusNode: _backFocusNode,
+                            order: 1,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              widget.stream.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (widget.stream.viewers > 0) ...[
+                            const Icon(Icons.visibility, size: 14, color: Colors.white60),
+                            const SizedBox(width: 4),
+                            Text(
+                              TimeUtils.formatViewers(widget.stream.viewers),
+                              style: const TextStyle(color: Colors.white60, fontSize: 12),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                          if (widget.stream.isLive) ...[
+                            const Icon(Icons.fiber_manual_record, size: 8, color: Colors.redAccent),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'LIVE',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
+                          _buildFocusableButton(
+                            icon: Icons.fullscreen,
+                            onPressed: _toggleFullscreen,
+                            tooltip: 'Fullscreen',
+                            focusNode: _fullscreenFocusNode,
+                            order: 2,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-          // Stream info bar
-          _buildInfoBar(context),
-        ],
+          ],
+        ),
       ),
     );
     }
 
-    // Focus widget for accessibility; key events handled by HardwareKeyboard listener
+    // Key events handled by HardwareKeyboard listener
     return screen;
   }
 
-  Widget _buildInfoBar(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              widget.stream.league,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            SportCategory.fromName(widget.stream.category).displayName,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const Spacer(),
-          if (widget.stream.isLive)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.fiber_manual_record, size: 8, color: Colors.white),
-                  SizedBox(width: 4),
-                  Text(
-                    'LIVE',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+  /// Icon button: invisible at rest, dark circular bg + white border on D-pad focus
+  Widget _buildFocusableButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    required String tooltip,
+    FocusNode? focusNode,
+    double size = 24,
+    bool autofocus = false,
+    int order = 0,
+  }) {
+    return FocusTraversalOrder(
+      order: NumericFocusOrder(order.toDouble()),
+      child: Focus(
+        focusNode: focusNode,
+        autofocus: autofocus,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
+              (event.logicalKey == LogicalKeyboardKey.enter ||
+               event.logicalKey == LogicalKeyboardKey.select ||
+               event.logicalKey == LogicalKeyboardKey.space)) {
+            onPressed();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Builder(
+          builder: (context) {
+            final isFocused = Focus.of(context).hasFocus;
+            return GestureDetector(
+              onTap: onPressed,
+              child: Semantics(
+                button: true,
+                label: tooltip,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isFocused ? Colors.black87 : Colors.transparent,
+                    border: Border.all(
+                      color: isFocused ? Colors.white : Colors.transparent,
+                      width: 2,
                     ),
                   ),
-                ],
+                  child: Icon(
+                    icon,
+                    color: Colors.white,
+                    size: size,
+                  ),
+                ),
               ),
-            ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }

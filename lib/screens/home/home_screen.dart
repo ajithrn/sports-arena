@@ -89,7 +89,33 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisCount = 2;
     }
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Exit App'),
+            content: const Text('Are you sure you want to exit?'),
+            actions: [
+              TextButton(
+                autofocus: true,
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        );
+        if (shouldExit == true && context.mounted) {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Row(
           children: [
@@ -170,6 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
+    ),
     );
   }
 

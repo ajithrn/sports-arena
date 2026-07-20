@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.3.2 - 2026-07-21
+
+### Added
+- **Native tap-to-play on Android TV** — uses platform channel to dispatch a real `MotionEvent` to the WebView, satisfying browser autoplay policies that reject synthetic JS events
+- **Player overlay UI** — streaming-app style top bar with gradient fade, auto-hides after 5s inactivity on TV, reappears on any remote press
+- **D-pad focus navigation** — manual focus management between Back and Fullscreen buttons via `HardwareKeyboard` handler (Left/Right to move, Enter to activate)
+- **Exit confirmation** — "Exit App" dialog when pressing back on the home screen (prevents accidental app exit on TV remotes)
+- **TV keyboard handler injection** — injects JavaScript keydown listener into WebView page for Enter/Space play/pause when WebView has platform focus
+- Viewer count moved to player bottom bar (beside LIVE badge)
+
+### Changed
+- Player screen redesigned: full-screen video with translucent gradient overlay (no solid bars)
+- LIVE indicator made subtle (red dot + text, no background box)
+- Buttons invisible at rest, show dark circular bg + white border only on D-pad focus
+- Top bar shows: Back button, stream name, viewer count, LIVE indicator, fullscreen button
+- No bottom bar — cleaner full-screen video experience
+- `simulateCenterClick` now tries native `MotionEvent` first (trusted), falls back to JS `video.play()`
+- Autoplay injection now dispatches touch events (not just `.click()`) for better embed compatibility
+- `HardwareKeyboard` handler no longer blocks D-pad arrows from reaching buttons
+- Overlay auto-hide is TV-only; desktop/mobile always show the top bar
+
+### Fixed
+- **D-pad unable to interact with embedded video player** — fundamental issue where Flutter intercepted all key events before they reached the WebView platform view
+- **Buttons not focusable after playing video** — WebView platform view grabbed Android focus; now handled by manual focus management
+- **Fullscreen button unreachable via D-pad** — Flutter's focus traversal couldn't cross non-focusable text widgets; replaced with explicit left/right focus switching
+- **Accidental back navigation** — removed autofocus from buttons, nothing highlighted until user moves D-pad
+
+### Technical
+- Added `tapWebViewCenter` method to `MainActivity.kt` — finds WebView in view hierarchy and dispatches `MotionEvent.ACTION_DOWN`/`ACTION_UP` at center
+- `PlayerWidgetState.simulateCenterClick()` now async, calls platform channel first
+- `_injectTvKeyboardHandler()` makes `document.body` focusable and listens for Enter/Space
+- Explicit `FocusNode` instances for back/fullscreen buttons with manual `requestFocus()` management
+- `OrderedTraversalPolicy` with `NumericFocusOrder` for predictable D-pad traversal
+
 ## 1.3.1 - 2026-07-20
 
 ### Added

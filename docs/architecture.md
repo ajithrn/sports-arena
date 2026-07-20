@@ -85,11 +85,16 @@ User enters domain → DomainService saves it
 ### Android TV
 - Detected via platform channel (`UiModeManager`)
 - Hybrid Composition WebView for proper D-pad interaction with iframe content
+- Native `MotionEvent` dispatch via `tapWebViewCenter` platform channel method (finds WebView in view hierarchy, dispatches trusted touch at center)
+- `HardwareKeyboard` handler intercepts Enter/Select for native tap, D-pad arrows for manual focus movement between buttons
+- Player overlay auto-hides after 5s, reappears on any remote key press
+- Focus management: explicit `FocusNode` per button, `OrderedTraversalPolicy` for predictable left/right navigation
+- JS keyboard handler injected into WebView page (Enter/Space triggers play/pause when WebView has platform focus)
 - Larger grid (4 columns), bigger cards
-- D-pad navigation with visible focus highlights (glow + border)
-- Remote Select/Enter triggers play, media keys supported
+- D-pad navigation with visible focus highlights (dark bg + white border on focus)
 - Leanback launcher with proper 320x180 banner icon
-- Aggressive autoplay with multiple retry attempts
+- Aggressive autoplay: native taps at 2s/4s/7s + JS touch event simulation
+- Exit confirmation on home screen back press
 
 ### macOS
 - Player uses `webview_flutter_wkwebview` (WKWebView)

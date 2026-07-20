@@ -2,7 +2,7 @@
 
 Live sports streaming app built with Flutter. Supports Android (phone + TV), macOS, Windows, and Web.
 
-[![Build & Release](https://img.shields.io/github/actions/workflow/status/ajithrn/sports-arena/build-release.yml?label=Build)](https://github.com/ajithrn/sports-arena/actions/workflows/build-release.yml) [![Latest](https://img.shields.io/badge/LATEST-v1.3.1-blue)](https://github.com/ajithrn/sports-arena/releases/latest) [![Download](https://img.shields.io/badge/DOWNLOAD-APK-green)](https://github.com/ajithrn/sports-arena/releases/latest/download/sports-arena-latest.apk) [![Downloader](https://img.shields.io/badge/DOWNLOADER-9563542-orange)](http://aftv.news/9563542)
+[![Build & Release](https://img.shields.io/github/actions/workflow/status/ajithrn/sports-arena/build-release.yml?label=Build)](https://github.com/ajithrn/sports-arena/actions/workflows/build-release.yml) [![Latest](https://img.shields.io/badge/LATEST-v1.3.2-blue)](https://github.com/ajithrn/sports-arena/releases/latest) [![Download](https://img.shields.io/badge/DOWNLOAD-APK-green)](https://github.com/ajithrn/sports-arena/releases/latest/download/sports-arena-latest.apk) [![Downloader](https://img.shields.io/badge/DOWNLOADER-9563542-orange)](http://aftv.news/9563542)
 
 ## Features
 
