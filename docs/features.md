@@ -43,6 +43,7 @@
 - **Defaults**: Default category filter, auto-refresh toggle + interval (30s/60s/2min/5min)
 - **Data & Cache**: Clear stream cache manually
 - **About**: App name/version, help & tips, check for updates
+- **Update**: In-app download with progress bar on Android, browser fallback on other platforms
 
 ## Onboarding
 - Clean domain entry screen
@@ -77,6 +78,8 @@
 - Windows: WebView2 via webview_win_floating package (requires WebView2 Runtime)
 - Help & Tips screen with platform-specific instructions
 - Update check downloads correct platform asset (APK/DMG/ZIP) via url_launcher
+- **In-app APK download & install** on Android (phone + TV) with progress dialog and cancel support
+- Release signing with persistent keystore via GitHub Actions secrets
 
 ## Category Naming
 - "soccer" API category displayed as "Football"

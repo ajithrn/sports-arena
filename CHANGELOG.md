@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.3.3 - 2026-07-21
+
+### Added
+- **In-app APK download & install on Android** — tapping "Download" now downloads the APK with a progress dialog and triggers installation directly, no browser needed
+- **Android TV update support** — in-app download works without requiring a browser (which Android TV doesn't have)
+- **Release signing via GitHub Actions** — workflow decodes keystore from secrets, ensuring every release APK is signed with the same key
+- `ApkDownloadService` with download progress, cancel support, and permission handling
+- `REQUEST_INSTALL_PACKAGES` permission for triggering APK installs
+- `FileProvider` configuration for sharing downloaded APK with system installer
+- `dio`, `open_filex`, `path_provider`, `permission_handler` dependencies
+
+### Changed
+- Update flow on Android now downloads & installs in-app instead of opening browser
+- Release build signing moved from debug keystore to a persistent release keystore
+- `build.gradle.kts` loads signing config from `key.properties` (falls back to debug if missing)
+- GitHub Actions workflow creates `key.properties` from repository secrets during build
+
+### Fixed
+- **Users forced to uninstall before updating** — caused by different signing keys on each CI build (debug keystore is unique per machine)
+- **Download button doing nothing on Android TV** — no browser available to handle the URL
+- **Download button unreliable on Android phones** — depended on browser downloading APK correctly
+
+### Technical
+- `android/key.properties` gitignored (contains signing secrets)
+- `android/app/src/main/res/xml/file_paths.xml` added for FileProvider
+- GitHub secrets required: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`, `KEY_ALIAS`
+
 ## 1.3.2 - 2026-07-21
 
 ### Added

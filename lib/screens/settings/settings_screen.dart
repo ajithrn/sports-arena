@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +10,7 @@ import '../../providers/settings_provider.dart';
 import '../../providers/streams_provider.dart';
 import '../../services/domain_service.dart';
 import '../../services/update_service.dart';
+import '../../services/apk_download_service.dart';
 import 'help_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -530,6 +533,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
+    // On Android, download and install APK in-app
+    if (!kIsWeb && Platform.isAndroid) {
+      _downloadAndInstallApk(url);
+      return;
+    }
+
+    // On other platforms, open in browser
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -543,5 +553,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     }
+  }
+
+  void _downloadAndInstallApk(String url) {
+    double progress = 0;
+    String status = 'Preparing download...';
+    bool isCancelled = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          // Start the download when dialog first builds
+          if (progress == 0 && status == 'Preparing download...') {
+            ApkDownloadService.downloadAndInstall(
+              url: url,
+              onProgress: (p) {
+                if (!isCancelled) {
+                  setDialogState(() => progress = p);
+                }
+              },
+              onStatusChange: (s) {
+                if (!isCancelled) {
+                  setDialogState(() => status = s);
+                }
+              },
+            ).then((success) {
+              if (!isCancelled && ctx.mounted) {
+                Navigator.of(ctx).pop();
+                if (!success && status != 'Download cancelled') {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(
+                      content: Text(status),
+                      behavior: SnackBarBehavior.floating,
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            });
+          }
+
+          return AlertDialog(
+            title: const Text('Downloading Update'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(value: progress > 0 ? progress : null),
+                const SizedBox(height: 16),
+                Text(
+                  status,
+                  style: const TextStyle(fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  isCancelled = true;
+                  ApkDownloadService.cancelDownload();
+                  Navigator.of(ctx).pop();
+                },
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }
