@@ -67,6 +67,12 @@ class _PlayerWidgetState extends State<PlayerWidget> {
   @override
   void dispose() {
     _sandboxRemovalTimer?.cancel();
+    // Remove the iframe to stop playback when navigating away
+    final iframe = html.document.getElementById(_viewId);
+    if (iframe is html.IFrameElement) {
+      iframe.src = '';
+      iframe.remove();
+    }
     super.dispose();
   }
 

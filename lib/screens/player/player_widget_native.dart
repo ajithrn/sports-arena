@@ -3,31 +3,74 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import '../../utils/platform_utils.dart';
 
-/// Player widget for Android (mobile & TV).
-/// Mobile: Uses Hybrid Composition for proper touch handling.
-/// TV: Uses default texture mode (lighter) since TV uses D-pad, not touch.
+/// Player widget for native platforms (Android, macOS, Windows).
+/// Android Mobile: Uses Hybrid Composition for proper touch handling.
+/// Android TV: Uses default texture mode (lighter) since TV uses D-pad, not touch.
+/// macOS: Uses WKWebView with inline media playback enabled.
+/// Windows: Uses WebView2 via webview_win_floating (implements webview_flutter API).
 class PlayerWidget extends StatefulWidget {
   final String embedUrl;
 
   const PlayerWidget({super.key, required this.embedUrl});
 
   @override
-  State<PlayerWidget> createState() => _PlayerWidgetState();
+  State<PlayerWidget> createState() => PlayerWidgetState();
 }
 
-class _PlayerWidgetState extends State<PlayerWidget> {
+class PlayerWidgetState extends State<PlayerWidget> {
   late final WebViewController _controller;
   bool _isLoading = true;
+
+  bool get _isDesktop =>
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.windows;
 
   @override
   void initState() {
     super.initState();
+    _initController();
+    _controller.loadRequest(Uri.parse(widget.embedUrl));
+    // Safety timeout: dismiss loading after 8 seconds regardless
+    Future.delayed(const Duration(seconds: 8), () {
+      if (mounted && _isLoading) {
+        setState(() => _isLoading = false);
+      }
+    });
+  }
 
-    _controller = WebViewController()
+  @override
+  void dispose() {
+    // Stop any playing media and clear the WebView to prevent background playback
+    _controller.runJavaScript('''
+      (function() {
+        var videos = document.querySelectorAll('video');
+        videos.forEach(function(v) { v.pause(); v.src = ''; v.load(); });
+        var audios = document.querySelectorAll('audio');
+        audios.forEach(function(a) { a.pause(); a.src = ''; a.load(); });
+      })();
+    ''');
+    _controller.loadRequest(Uri.parse('about:blank'));
+    super.dispose();
+  }
+
+  void _initController() {
+    // macOS/iOS: use WebKit-specific params for inline media playback
+    if (defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      final webKitParams = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+      );
+      _controller = WebViewController.fromPlatformCreationParams(webKitParams);
+    } else {
+      _controller = WebViewController();
+    }
+
+    _controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) {
@@ -39,6 +82,7 @@ class _PlayerWidgetState extends State<PlayerWidget> {
             _injectAutoplay();
           },
           onWebResourceError: (error) {
+            debugPrint('WebView error: ${error.description} (${error.errorCode})');
             if (mounted) setState(() => _isLoading = false);
           },
           onNavigationRequest: (request) {
@@ -51,12 +95,13 @@ class _PlayerWidgetState extends State<PlayerWidget> {
         ),
       );
 
-    // Android-specific
-    final androidController =
-        _controller.platform as AndroidWebViewController;
-    androidController.setMediaPlaybackRequiresUserGesture(false);
-
-    _controller.loadRequest(Uri.parse(widget.embedUrl));
+    // Android-specific: disable user gesture requirement for media playback
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      _controller.setBackgroundColor(Colors.black);
+      final androidController =
+          _controller.platform as AndroidWebViewController;
+      androidController.setMediaPlaybackRequiresUserGesture(false);
+    }
   }
 
   bool _isAdUrl(String url) {
@@ -84,14 +129,37 @@ class _PlayerWidgetState extends State<PlayerWidget> {
   }
 
   void _injectAutoplay() {
+    // On TV, be more aggressive with autoplay attempts
+    final isTv = PlatformUtils.isTv;
     _controller.runJavaScript('''
       (function() {
         function tryPlay() {
+          // Try direct video element
           var video = document.querySelector('video');
-          if (video) { video.play().catch(function(){}); return; }
-          var playBtn = document.querySelector('.play-button, .vjs-big-play-button, [aria-label="Play"], .plyr__control--overlaid, button[data-plyr="play"]');
-          if (playBtn) { playBtn.click(); return; }
-          var buttons = document.querySelectorAll('button, [role="button"]');
+          if (video) {
+            video.play().catch(function(){});
+            return true;
+          }
+          // Try common play button selectors
+          var selectors = [
+            '.play-button',
+            '.vjs-big-play-button',
+            '[aria-label="Play"]',
+            '[aria-label="play"]',
+            '.plyr__control--overlaid',
+            'button[data-plyr="play"]',
+            '.jw-icon-playback',
+            '.bmpui-ui-hugeplaybacktogglebutton',
+            '.video-js .vjs-play-control',
+            '[class*="play" i]',
+            '[id*="play" i]'
+          ];
+          for (var i = 0; i < selectors.length; i++) {
+            var btn = document.querySelector(selectors[i]);
+            if (btn) { btn.click(); return true; }
+          }
+          // Try clicking center of viewport (common for overlay play buttons)
+          var buttons = document.querySelectorAll('button, [role="button"], div[onclick], a');
           for (var i = 0; i < buttons.length; i++) {
             var rect = buttons[i].getBoundingClientRect();
             var cx = window.innerWidth / 2;
@@ -99,12 +167,49 @@ class _PlayerWidgetState extends State<PlayerWidget> {
             if (Math.abs(rect.left + rect.width/2 - cx) < 200 &&
                 Math.abs(rect.top + rect.height/2 - cy) < 200) {
               buttons[i].click();
-              break;
+              return true;
             }
           }
+          return false;
         }
+        // Multiple attempts - more aggressive on TV
+        ${isTv ? '''
+        setTimeout(tryPlay, 500);
+        setTimeout(tryPlay, 1000);
         setTimeout(tryPlay, 1500);
-        setTimeout(tryPlay, 3000);
+        setTimeout(tryPlay, 2500);
+        setTimeout(tryPlay, 4000);
+        setTimeout(tryPlay, 6000);
+        ''' : '''
+        setTimeout(tryPlay, 1000);
+        setTimeout(tryPlay, 2000);
+        setTimeout(tryPlay, 3500);
+        setTimeout(tryPlay, 5000);
+        '''}
+      })();
+    ''');
+  }
+
+  /// Simulate a click in the center of the WebView (for TV D-pad select)
+  void simulateCenterClick() {
+    _controller.runJavaScript('''
+      (function() {
+        // First try to find and click play button
+        var video = document.querySelector('video');
+        if (video && video.paused) { video.play().catch(function(){}); return; }
+        if (video && !video.paused) { video.pause(); return; }
+
+        // Click the center of the page
+        var cx = window.innerWidth / 2;
+        var cy = window.innerHeight / 2;
+        var el = document.elementFromPoint(cx, cy);
+        if (el) {
+          el.click();
+          // Also dispatch pointer events for players that listen to those
+          el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, clientX: cx, clientY: cy}));
+          el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, clientX: cx, clientY: cy}));
+          el.dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: cx, clientY: cy}));
+        }
       })();
     ''');
   }
@@ -139,6 +244,28 @@ class _PlayerWidgetState extends State<PlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Desktop (macOS/Windows): simple WebViewWidget, no special composition needed
+    if (_isDesktop) {
+      return Container(
+        color: Colors.black,
+        child: Stack(
+          children: [
+            WebViewWidget(controller: _controller),
+            if (_isLoading)
+              IgnorePointer(
+                child: Container(
+                  color: Colors.black,
+                  child: const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    // Android: use hybrid composition for mobile, texture mode for TV
     final useHybrid = !PlatformUtils.isTv;
 
     return Container(

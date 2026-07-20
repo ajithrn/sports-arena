@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
@@ -8,6 +8,7 @@ import '../../providers/settings_provider.dart';
 import '../../providers/streams_provider.dart';
 import '../../services/domain_service.dart';
 import '../../services/update_service.dart';
+import 'help_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -296,20 +297,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onChanged: (mode) => settings.setThemeMode(mode!),
         child: Column(
           children: [
-            RadioListTile<ThemeMode>(
+            ListTile(
+              leading: const Icon(Icons.dark_mode),
               title: const Text('Dark'),
-              secondary: const Icon(Icons.dark_mode),
-              value: ThemeMode.dark,
+              trailing: Radio<ThemeMode>(value: ThemeMode.dark),
+              onTap: () => settings.setThemeMode(ThemeMode.dark),
             ),
-            RadioListTile<ThemeMode>(
+            ListTile(
+              leading: const Icon(Icons.light_mode),
               title: const Text('Light'),
-              secondary: const Icon(Icons.light_mode),
-              value: ThemeMode.light,
+              trailing: Radio<ThemeMode>(value: ThemeMode.light),
+              onTap: () => settings.setThemeMode(ThemeMode.light),
             ),
-            RadioListTile<ThemeMode>(
+            ListTile(
+              leading: const Icon(Icons.settings_brightness),
               title: const Text('System'),
-              secondary: const Icon(Icons.settings_brightness),
-              value: ThemeMode.system,
+              trailing: Radio<ThemeMode>(value: ThemeMode.system),
+              onTap: () => settings.setThemeMode(ThemeMode.system),
             ),
           ],
         ),
@@ -423,6 +427,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         children: [
           ListTile(
+            leading: const Icon(Icons.help_outline),
+            title: const Text('Help & Tips'),
+            subtitle: const Text('How to use the app'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HelpScreen()),
+              );
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.info_outline),
             title: const Text(AppConfig.appName),
             subtitle: Text('Version ${AppConfig.appVersion}'),
@@ -501,35 +517,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _openDownloadUrl(String url) {
-    // On web, open in same window. On Android, use url_launcher or just show the URL.
-    if (kIsWeb) {
-      // Web: can't easily open URLs without url_launcher, show snackbar with URL
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Download: $url'),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 10),
-        ),
-      );
-    } else {
-      // Android: show dialog with the download link
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Download Update'),
-          content: SelectableText(
-            url,
-            style: const TextStyle(fontSize: 13),
+  void _openDownloadUrl(String url) async {
+    if (url.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No download URL available'),
+            behavior: SnackBarBehavior.floating,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
+        );
+      }
+      return;
+    }
+
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open: $url'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 }

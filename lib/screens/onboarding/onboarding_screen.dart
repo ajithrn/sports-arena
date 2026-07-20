@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
@@ -214,12 +215,89 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ),
                       ),
                     ),
+
+                    const SizedBox(height: 32),
+
+                    // Quick tips
+                    _buildQuickTips(context),
                   ],
                 ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildQuickTips(BuildContext context) {
+    final isDesktop = defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows;
+
+    final tips = isDesktop
+        ? [
+            ('Icons.play_circle_outline', 'Tap a stream to start watching'),
+            ('Icons.fullscreen', 'Press F for fullscreen, Esc to exit'),
+            ('Icons.filter_list', 'Filter by sport using category tabs'),
+            ('Icons.settings', 'Change server or theme in Settings'),
+          ]
+        : [
+            ('Icons.play_circle_outline', 'Tap a stream to start watching'),
+            ('Icons.fullscreen', 'Double-tap player for fullscreen'),
+            ('Icons.filter_list', 'Filter by sport using category tabs'),
+            ('Icons.settings', 'Change server or theme in Settings'),
+          ];
+
+    final icons = [
+      Icons.play_circle_outline,
+      Icons.fullscreen,
+      Icons.filter_list,
+      Icons.settings,
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.lightbulb_outline,
+                size: 18,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Quick Tips',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...List.generate(tips.length, (i) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Icon(icons[i], size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    tips[i].$2,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          )),
+        ],
       ),
     );
   }

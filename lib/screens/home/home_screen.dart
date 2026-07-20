@@ -206,70 +206,100 @@ class _HomeScreenState extends State<HomeScreen> {
     required VoidCallback onTap,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isTv = PlatformUtils.isTv;
 
     return Semantics(
       button: true,
       selected: isSelected,
       label: '$label category, $count streams',
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          onTap();
+      child: Builder(
+        builder: (context) {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                onTap();
+              },
+              borderRadius: BorderRadius.circular(20),
+              focusColor: colorScheme.primary.withValues(alpha: 0.3),
+              onFocusChange: (_) {
+                // Trigger rebuild for focus state
+                (context as Element).markNeedsBuild();
+              },
+              child: Builder(
+                builder: (innerContext) {
+                  final hasFocus = Focus.of(innerContext).hasFocus;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSelected ? colorScheme.primary : colorScheme.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: hasFocus
+                            ? Colors.white
+                            : isSelected
+                                ? colorScheme.primary
+                                : colorScheme.outline.withValues(alpha: 0.3),
+                        width: hasFocus ? 2.5 : 1,
+                      ),
+                      boxShadow: hasFocus && isTv
+                          ? [
+                              BoxShadow(
+                                color: colorScheme.primary.withValues(alpha: 0.6),
+                                blurRadius: 8,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          icon,
+                          size: 16,
+                          color: isSelected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            color: isSelected ? colorScheme.onPrimary : colorScheme.onSurface,
+                          ),
+                        ),
+                        if (count > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? colorScheme.onPrimary.withValues(alpha: 0.2)
+                                  : colorScheme.primary.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '$count',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isSelected ? colorScheme.onPrimary : colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
         },
-        child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? colorScheme.primary : colorScheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected
-                ? colorScheme.primary
-                : colorScheme.outline.withValues(alpha: 0.3),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isSelected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected ? colorScheme.onPrimary : colorScheme.onSurface,
-              ),
-            ),
-            if (count > 0) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? colorScheme.onPrimary.withValues(alpha: 0.2)
-                      : colorScheme.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '$count',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: isSelected ? colorScheme.onPrimary : colorScheme.primary,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
       ),
-    ),
     );
   }
 

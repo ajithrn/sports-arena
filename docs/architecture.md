@@ -2,12 +2,13 @@
 
 ## Tech Stack
 
-- **Framework**: Flutter 3.38+ (Dart)
+- **Framework**: Flutter 3.44+ (Dart)
 - **State Management**: Provider (ChangeNotifier pattern)
 - **HTTP**: `http` package
-- **Player**: WebView (Android), iframe HtmlElementView (Web)
+- **Player**: WebView (Android/macOS/Windows), iframe HtmlElementView (Web)
+- **Window Management**: `window_manager` (desktop fullscreen/sizing)
 - **Storage**: SharedPreferences for domain and settings
-- **Platforms**: Android (mobile + TV), Web
+- **Platforms**: Android (mobile + TV), macOS, Windows, Web
 
 ## Project Structure
 
@@ -28,14 +29,16 @@ lib/
 │   └── settings_provider.dart         # Theme, default category, auto-refresh
 ├── screens/
 │   ├── splash/splash_screen.dart      # Animated splash, checks if domain is set
-│   ├── onboarding/onboarding_screen.dart  # Domain entry + validation
+│   ├── onboarding/onboarding_screen.dart  # Domain entry + validation + quick tips
 │   ├── home/home_screen.dart          # Category bar + stream grid
 │   ├── player/
-│   │   ├── player_screen.dart         # Player page with fullscreen toggle
+│   │   ├── player_screen.dart         # Player page with fullscreen toggle + keyboard shortcuts
 │   │   ├── player_widget.dart         # Conditional export (web vs native)
-│   │   ├── player_widget_native.dart  # Android WebView player
+│   │   ├── player_widget_native.dart  # Android/macOS/Windows WebView player
 │   │   └── player_widget_web.dart     # Web iframe player
-│   └── settings/settings_screen.dart  # Settings page
+│   └── settings/
+│       ├── settings_screen.dart       # Settings page
+│       └── help_screen.dart           # Help & tips page
 ├── widgets/
 │   ├── stream_card.dart               # Stream card with teams, badges
 │   ├── category_chip.dart             # Category filter chip (unused, replaced)
@@ -81,3 +84,17 @@ User enters domain → DomainService saves it
 - Larger grid (4 columns), bigger cards
 - D-pad friendly layout
 - Leanback launcher intent in AndroidManifest
+
+### macOS
+- Player uses `webview_flutter_wkwebview` (WKWebView)
+- `WebKitWebViewControllerCreationParams` with `allowsInlineMediaPlayback: true`
+- `mediaTypesRequiringUserAction` set to empty for autoplay
+- App sandbox entitlements with `com.apple.security.network.client`
+- Native window fullscreen via `window_manager`
+- Keyboard shortcuts: F, Esc, Cmd+F
+
+### Windows
+- Player uses `webview_win_floating` (WebView2, implements webview_flutter API)
+- Requires WebView2 Runtime (pre-installed on Windows 11, usually on Windows 10)
+- Native window fullscreen via `window_manager`
+- Keyboard shortcuts: F, Esc, Ctrl+F

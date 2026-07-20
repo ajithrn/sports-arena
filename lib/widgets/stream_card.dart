@@ -4,7 +4,7 @@ import '../models/stream_model.dart';
 import '../models/category_model.dart';
 import '../utils/time_utils.dart';
 
-class StreamCard extends StatelessWidget {
+class StreamCard extends StatefulWidget {
   final SportStream stream;
   final VoidCallback onTap;
   final bool isTvLayout;
@@ -17,51 +17,82 @@ class StreamCard extends StatelessWidget {
   });
 
   @override
+  State<StreamCard> createState() => _StreamCardState();
+}
+
+class _StreamCardState extends State<StreamCard> {
+  bool _isHovered = false;
+  bool _isFocused = false;
+
+  SportStream get stream => widget.stream;
+  bool get isTvLayout => widget.isTvLayout;
+
+  @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
       label: '${stream.name}, ${stream.league}, ${stream.isLive ? "live now" : "upcoming"}, ${TimeUtils.formatViewers(stream.viewers)} viewers',
-      child: Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Thumbnail / Team logos section
-            _buildThumbnail(context),
-            // Info section
-            Padding(
-              padding: EdgeInsets.all(isTvLayout ? 16 : 12),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          transform: _isHovered || _isFocused
+              ? (Matrix4.identity()..scaleByDouble(1.03, 1.03, 1.0, 1.0))
+              : Matrix4.identity(),
+          transformAlignment: Alignment.center,
+          child: Card(
+            clipBehavior: Clip.antiAlias,
+            elevation: _isHovered || _isFocused ? 8 : 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: _isFocused
+                  ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 2)
+                  : BorderSide.none,
+            ),
+            child: InkWell(
+              onTap: widget.onTap,
+              onFocusChange: (focused) => setState(() => _isFocused = focused),
+              hoverColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+              focusColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    stream.name,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: isTvLayout ? 18 : 14,
+                  // Thumbnail / Team logos section
+                  _buildThumbnail(context),
+                  // Info section
+                  Padding(
+                    padding: EdgeInsets.all(isTvLayout ? 16 : 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          stream.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isTvLayout ? 18 : 14,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            _buildLeagueBadge(context),
+                            const Spacer(),
+                            if (stream.viewers > 0) _buildViewerCount(context),
+                          ],
+                        ),
+                      ],
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      _buildLeagueBadge(context),
-                      const Spacer(),
-                      if (stream.viewers > 0) _buildViewerCount(context),
-                    ],
                   ),
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
-    ),
     );
   }
 

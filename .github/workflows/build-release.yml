@@ -1,4 +1,4 @@
-name: Build & Release APK
+name: Build & Release
 
 on:
   push:
@@ -9,11 +9,16 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  # Determine version and check if release already exists
+  check-version:
     runs-on: ubuntu-latest
-
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      should_build: ${{ steps.tag_check.outputs.exists == 'false' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Extract version from pubspec.yaml
         id: version
@@ -31,58 +36,162 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Skip if version already released
-        if: steps.tag_check.outputs.exists == 'true'
-        run: |
-          echo "Tag ${{ steps.version.outputs.VERSION }} already exists. Skipping build."
-          exit 0
+  # Build Android APK
+  build-android:
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Set up Java
-        if: steps.tag_check.outputs.exists == 'false'
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
       - name: Set up Flutter
-        if: steps.tag_check.outputs.exists == 'false'
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.6'
           channel: 'stable'
 
       - name: Get dependencies
-        if: steps.tag_check.outputs.exists == 'false'
         run: flutter pub get
 
       - name: Build release APK
-        if: steps.tag_check.outputs.exists == 'false'
         run: flutter build apk --release
 
       - name: Rename APK
-        if: steps.tag_check.outputs.exists == 'false'
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sports-arena-${{ steps.version.outputs.VERSION }}.apk
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sports-arena-${{ needs.check-version.outputs.version }}.apk
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sports-arena-latest.apk
 
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build
+          path: |
+            build/app/outputs/flutter-apk/sports-arena-${{ needs.check-version.outputs.version }}.apk
+            build/app/outputs/flutter-apk/sports-arena-latest.apk
+
+  # Build macOS .app and .dmg installer
+  build-macos:
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.6'
+          channel: 'stable'
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build macOS release
+        run: flutter build macos --release
+
+      - name: Create DMG installer
+        run: |
+          APP_PATH="build/macos/Build/Products/Release/Sports Arena.app"
+          DMG_NAME="sports-arena-${{ needs.check-version.outputs.version }}-macos.dmg"
+
+          # Create a temporary directory for DMG contents
+          mkdir -p dmg_contents
+          cp -R "$APP_PATH" dmg_contents/
+          ln -s /Applications dmg_contents/Applications
+
+          # Create DMG
+          hdiutil create -volname "Sports Arena" \
+            -srcfolder dmg_contents \
+            -ov -format UDZO \
+            "build/$DMG_NAME"
+
+          rm -rf dmg_contents
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: build/sports-arena-${{ needs.check-version.outputs.version }}-macos.dmg
+
+  # Build Windows .exe and zip installer
+  build-windows:
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.6'
+          channel: 'stable'
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Create Windows installer (zip)
+        shell: pwsh
+        run: |
+          $version = "${{ needs.check-version.outputs.version }}"
+          $buildDir = "build\windows\x64\runner\Release"
+          $zipName = "sports-arena-${version}-windows.zip"
+          Compress-Archive -Path "$buildDir\*" -DestinationPath "build\$zipName"
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: build/sports-arena-${{ needs.check-version.outputs.version }}-windows.zip
+
+  # Create GitHub Release with all platform artifacts
+  release:
+    needs: [check-version, build-android, build-macos, build-windows]
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
       - name: Create tag and release
-        if: steps.tag_check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.VERSION }}
-          name: Sports Arena ${{ steps.version.outputs.VERSION }}
+          tag_name: ${{ needs.check-version.outputs.version }}
+          name: Sports Arena ${{ needs.check-version.outputs.version }}
           body: |
-            ## Sports Arena ${{ steps.version.outputs.VERSION }}
+            ## Sports Arena ${{ needs.check-version.outputs.version }}
 
             ### Downloads
-            - **Android (Phone + TV):** Download the APK below and sideload
+            | Platform | Download |
+            |----------|----------|
+            | **Android (Phone + TV)** | `sports-arena-${{ needs.check-version.outputs.version }}.apk` |
+            | **macOS** | `sports-arena-${{ needs.check-version.outputs.version }}-macos.dmg` |
+            | **Windows** | `sports-arena-${{ needs.check-version.outputs.version }}-windows.zip` |
+
+            ### Install Instructions
+            - **Android:** Download APK and sideload, or use code `9563542` in the Downloader app on Fire Stick
+            - **macOS:** Open the `.dmg`, drag Sports Arena to Applications
+            - **Windows:** Extract the `.zip` and run `sports_arena.exe` (requires WebView2 Runtime)
 
             ### Install on Android TV / Fire Stick
             ```
-            adb install sports-arena-${{ steps.version.outputs.VERSION }}.apk
+            adb install sports-arena-${{ needs.check-version.outputs.version }}.apk
             ```
           files: |
-            build/app/outputs/flutter-apk/sports-arena-${{ steps.version.outputs.VERSION }}.apk
-            build/app/outputs/flutter-apk/sports-arena-latest.apk
+            artifacts/android-build/sports-arena-${{ needs.check-version.outputs.version }}.apk
+            artifacts/android-build/sports-arena-latest.apk
+            artifacts/macos-build/sports-arena-${{ needs.check-version.outputs.version }}-macos.dmg
+            artifacts/windows-build/sports-arena-${{ needs.check-version.outputs.version }}-windows.zip
           draft: false
           prerelease: false

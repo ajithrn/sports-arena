@@ -4,6 +4,8 @@
 
 - Flutter SDK 3.12+
 - Android Studio (for Android builds and emulators)
+- Xcode 14+ (for macOS builds)
+- Visual Studio 2019+ with "Desktop development with C++" workload (for Windows builds)
 - Chrome/Chromium (for web development)
 - Java 17+ (bundled with Android Studio)
 
@@ -19,6 +21,12 @@ flutter pub get
 ```bash
 # Web (fastest for development)
 flutter run -d chrome
+
+# macOS
+flutter run -d macos
+
+# Windows
+flutter run -d windows
 
 # Android device/emulator
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
@@ -38,6 +46,18 @@ export PATH="$JAVA_HOME/bin:$PATH"
 flutter build apk --release
 ```
 Output: `build/app/outputs/flutter-apk/app-release.apk`
+
+### macOS
+```bash
+flutter build macos --release
+```
+Output: `build/macos/Build/Products/Release/Sports Arena.app`
+
+### Windows
+```bash
+flutter build windows --release
+```
+Output: `build/windows/x64/runner/Release/`
 
 ### Web
 ```bash

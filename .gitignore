@@ -14,7 +14,8 @@ build/
 
 # macOS
 .DS_Store
-*.plist
+# Ignore plist files in root only (not in macos/ project directory)
+/*.plist
 
 # Android
 **/android/**/gradle-wrapper.jar

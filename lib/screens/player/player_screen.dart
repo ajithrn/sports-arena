@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 import '../../models/stream_model.dart';
 import '../../models/category_model.dart';
+import '../../utils/platform_utils.dart';
 import '../../utils/time_utils.dart';
 import 'player_widget.dart';
 
@@ -19,51 +22,104 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isFullscreen = false;
   bool _showFullscreenHint = false;
   Timer? _hintTimer;
+  Size? _savedWindowSize;
+  Offset? _savedWindowPosition;
+  final _playerKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    // Force landscape for better video viewing (optional)
-    // SystemChrome.setPreferredOrientations([
-    //   DeviceOrientation.landscapeLeft,
-    //   DeviceOrientation.landscapeRight,
-    // ]);
+    // Register hardware keyboard listener for TV remote and desktop shortcuts
+    if (_isDesktop || PlatformUtils.isTv) {
+      HardwareKeyboard.instance.addHandler(_hardwareKeyHandler);
+    }
+  }
+
+  /// Hardware key handler that works even when WebView has platform focus
+  bool _hardwareKeyHandler(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final result = _handleKeyEvent(FocusNode(), event);
+    return result == KeyEventResult.handled;
   }
 
   @override
   void dispose() {
     _hintTimer?.cancel();
-    // Restore orientation
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    super.dispose();
-  }
-
-  void _toggleFullscreen() {
-    setState(() {
-      _isFullscreen = !_isFullscreen;
-    });
-    HapticFeedback.mediumImpact();
-    if (_isFullscreen) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-      _showExitHint();
+    if (_isDesktop || PlatformUtils.isTv) {
+      HardwareKeyboard.instance.removeHandler(_hardwareKeyHandler);
+    }
+    if (_isDesktop) {
+      // Exit fullscreen and restore window if still active when leaving
+      if (_isFullscreen) {
+        windowManager.setFullScreen(false).then((_) {
+          if (_savedWindowSize != null) {
+            windowManager.setSize(_savedWindowSize!);
+          }
+          if (_savedWindowPosition != null) {
+            windowManager.setPosition(_savedWindowPosition!);
+          }
+        });
+      }
     } else {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      // Restore orientation
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
         DeviceOrientation.portraitDown,
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+    super.dispose();
+  }
+
+  bool get _isDesktop =>
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.windows;
+
+  void _toggleFullscreen() async {
+    setState(() {
+      _isFullscreen = !_isFullscreen;
+    });
+
+    if (_isDesktop) {
+      if (_isFullscreen) {
+        // Save current window size and position before going fullscreen
+        _savedWindowSize = await windowManager.getSize();
+        _savedWindowPosition = await windowManager.getPosition();
+        await windowManager.setFullScreen(true);
+        _showExitHint();
+      } else {
+        await windowManager.setFullScreen(false);
+        // Restore saved window size and position after a brief delay
+        // (macOS needs time to animate out of fullscreen)
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (_savedWindowSize != null) {
+          await windowManager.setSize(_savedWindowSize!);
+        }
+        if (_savedWindowPosition != null) {
+          await windowManager.setPosition(_savedWindowPosition!);
+        }
+      }
+    } else {
+      // Mobile: use SystemChrome for immersive mode + orientation
+      HapticFeedback.mediumImpact();
+      if (_isFullscreen) {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+        _showExitHint();
+      } else {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+      }
     }
   }
 
@@ -75,10 +131,83 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
   }
 
+  /// Handle keyboard shortcuts for desktop and TV remote
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+
+    // Android TV: D-pad center / Select / Enter / Media keys → simulate click in player
+    if (PlatformUtils.isTv) {
+      if (key == LogicalKeyboardKey.select ||
+          key == LogicalKeyboardKey.enter ||
+          key == LogicalKeyboardKey.numpadEnter ||
+          key == LogicalKeyboardKey.gameButtonA ||
+          key == LogicalKeyboardKey.mediaPlayPause ||
+          key == LogicalKeyboardKey.mediaPlay ||
+          key == LogicalKeyboardKey.space) {
+        _simulatePlayerClick();
+        return KeyEventResult.handled;
+      }
+      // Media stop
+      if (key == LogicalKeyboardKey.mediaStop ||
+          key == LogicalKeyboardKey.mediaPause) {
+        _simulatePlayerClick();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    if (!_isDesktop) return KeyEventResult.ignored;
+
+    // Esc — exit fullscreen
+    if (key == LogicalKeyboardKey.escape && _isFullscreen) {
+      _toggleFullscreen();
+      return KeyEventResult.handled;
+    }
+
+    // F — toggle fullscreen
+    if (key == LogicalKeyboardKey.keyF &&
+        !HardwareKeyboard.instance.isMetaPressed &&
+        !HardwareKeyboard.instance.isControlPressed) {
+      _toggleFullscreen();
+      return KeyEventResult.handled;
+    }
+
+    // Cmd+F (macOS) / Ctrl+F (Windows) — toggle fullscreen
+    if (key == LogicalKeyboardKey.keyF &&
+        (HardwareKeyboard.instance.isMetaPressed ||
+            HardwareKeyboard.instance.isControlPressed)) {
+      _toggleFullscreen();
+      return KeyEventResult.handled;
+    }
+
+    // Space — play/pause
+    if (key == LogicalKeyboardKey.space) {
+      _simulatePlayerClick();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  void _simulatePlayerClick() {
+    final state = _playerKey.currentState;
+    // simulateCenterClick is available on native PlayerWidgetState
+    if (state != null) {
+      try {
+        (state as dynamic).simulateCenterClick();
+      } catch (_) {
+        // Web platform doesn't support this
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    Widget screen;
     if (_isFullscreen) {
-      return PopScope(
+      screen = PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, result) {
           if (!didPop) {
@@ -93,7 +222,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onDoubleTap: _toggleFullscreen,
             child: Stack(
               children: [
-                PlayerWidget(embedUrl: widget.stream.embedUrl),
+                PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl),
                 // Fullscreen exit hint overlay
                 if (_showFullscreenHint)
                   Positioned.fill(
@@ -111,17 +240,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               color: Colors.black.withValues(alpha: 0.75),
                               borderRadius: BorderRadius.circular(24),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  Icons.touch_app,
+                                  _isDesktop ? Icons.keyboard : Icons.touch_app,
                                   color: Colors.white70,
                                   size: 20,
                                 ),
                                 SizedBox(width: 8),
                                 Text(
-                                  'Double-tap or press back to exit fullscreen',
+                                  _isDesktop
+                                      ? 'Press Esc or F to exit fullscreen'
+                                      : 'Double-tap or press back to exit fullscreen',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 14,
@@ -140,9 +271,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         ),
       );
-    }
-
-    return Scaffold(
+    } else {
+      screen = Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text(
@@ -164,7 +294,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           IconButton(
             icon: const Icon(Icons.fullscreen),
             onPressed: _toggleFullscreen,
-            tooltip: 'Fullscreen',
+            tooltip: 'Fullscreen (F)',
           ),
         ],
       ),
@@ -174,7 +304,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           Expanded(
             child: Container(
               color: Colors.black,
-              child: PlayerWidget(embedUrl: widget.stream.embedUrl),
+              child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl),
             ),
           ),
           // Stream info bar
@@ -182,6 +312,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ],
       ),
     );
+    }
+
+    // Focus widget for accessibility; key events handled by HardwareKeyboard listener
+    return screen;
   }
 
   Widget _buildInfoBar(BuildContext context) {

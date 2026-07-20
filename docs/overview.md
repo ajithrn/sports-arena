@@ -1,13 +1,13 @@
 # Sports Arena - Overview
 
-Sports Arena is a generic live sports streaming client built with Flutter. It connects to any compatible streaming API and lets users watch live sports on Android (phone + TV) and Web.
+Sports Arena is a generic live sports streaming client built with Flutter. It connects to any compatible streaming API and lets users watch live sports on Android (phone + TV), macOS, Windows, and Web.
 
 ## What It Does
 
 - Fetches live streams from a user-provided streaming server
 - Displays streams organized by sport categories
 - Plays streams via an embedded WebView player
-- Works on Android phones, Android TV / Fire Stick, and web browsers
+- Works on Android phones, Android TV / Fire Stick, macOS, Windows, and web browsers
 - Blocks ad popups and new tab opens from the embed player
 
 ## How It Works
@@ -16,7 +16,16 @@ Sports Arena is a generic live sports streaming client built with Flutter. It co
 2. **App validates** the domain by hitting `/api/v1/categories`
 3. **Domain is saved** locally — no need to re-enter on next launch
 4. **Home screen** shows all live streams with category filtering and sorting
-5. **Tap a stream** → opens the embedded player via WebView (Android) or iframe (Web)
+5. **Tap a stream** → opens the embedded player via WebView (Android/macOS/Windows) or iframe (Web)
+
+## Supported Platforms
+
+| Platform | Player Technology | Installer |
+|----------|------------------|-----------|
+| Android (Phone + TV) | Android WebView | APK |
+| macOS 10.15+ | WKWebView | DMG |
+| Windows 10 1809+ | WebView2 | ZIP |
+| Web | iframe | Static hosting |
 
 ## No Hardcoded URLs
 
