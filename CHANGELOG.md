@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.4.0 - 2026-07-21
+
+### Added
+- **DNS bypass proxy** — local CONNECT proxy with DoH resolution + TLS ClientHello fragmentation to bypass ISP blocking (see [docs/proxy.md](docs/proxy.md))
+- **DoH fallback rotation** — automatically tries multiple DoH providers if one is blocked/slow
+- **Proxy-level ad blocking** — blocks known ad/tracking domains at proxy layer
+- **JS overlay remover** — strips ad overlays covering the video player via MutationObserver
+- **Android WebView proxy** — ProxyController routes WebView traffic through bypass proxy
+- **macOS system proxy** — sets system HTTPS proxy for WKWebView bypass
+- **Configurable DoH servers** — Cloudflare, Cloudflare (IP), Google, Google (IP), NextDNS
+- **Improved error messages** — user-friendly messages with short error codes
+- **Onboarding skip** — proceed even if domain validation fails
+- **Responsive settings layout** — 2/3 column grid on wide screens
+
+### Changed
+- Update dialog shows commit message under "What's new"
+- APK download uses external cache directory, improved permission flow
+- Settings UI with Network section (DNS proxy toggle, server picker)
+- Settings wide layout uses 2 columns (removed 3-col), cards stretch to equal row height
+- macOS entitlements — disabled app sandbox for both debug and release (required for system proxy)
+- macOS proxy helper — calls `networksetup` directly instead of via osascript with admin privileges
+- DoH timeout increased to 5s for reliability
+
+### Fixed
+- TLS fragmentation not bypassing DPI — added `socket.flush()` per fragment for real TCP segment separation
+- DoH failing on Android emulator — added IP-based fallbacks (1.1.1.1, 8.8.8.8) that skip DNS
+- Ad overlays blocking video when proxy enabled — DoH resolved ad domains that ISP normally blocked
+- macOS system proxy not setting — removed osascript/admin prompt, use direct `networksetup` (works without admin)
+- macOS WKWebView blank screen — disabled app sandbox so `networksetup` can execute
+- Android APK install permission denied (FileProvider + external cache)
+- Added `network.server` entitlement for macOS, `androidx.webkit` for Android
+- Settings card heights uneven in wide layout — use `IntrinsicHeight` + `Expanded` for equal row heights
+- Stream card horizontal overflow on small screens — team logos now flexible
+- Stream card bottom overflow — adjusted info section height
+
 ## 1.3.4 - 2026-07-21
 
 ### Fixed

@@ -134,19 +134,23 @@ class _StreamCardState extends State<StreamCard> {
           ],
         ),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildTeamLogo(stream.team1!),
-          Text(
-            'VS',
-            style: TextStyle(
-              fontSize: isTvLayout ? 24 : 18,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
+          Flexible(child: _buildTeamLogo(stream.team1!)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'VS',
+              style: TextStyle(
+                fontSize: isTvLayout ? 24 : 18,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+              ),
             ),
           ),
-          _buildTeamLogo(stream.team2!),
+          Flexible(child: _buildTeamLogo(stream.team2!)),
         ],
       ),
     );

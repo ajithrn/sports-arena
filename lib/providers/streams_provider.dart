@@ -3,6 +3,7 @@ import '../models/stream_model.dart';
 import '../models/category_model.dart';
 import '../services/api_service.dart';
 import '../services/domain_service.dart';
+import '../utils/error_utils.dart';
 
 enum SortOption {
   viewers,     // Most viewers first
@@ -19,7 +20,7 @@ class StreamsProvider extends ChangeNotifier {
   String? _selectedCategory;
   SortOption _sortOption = SortOption.viewers;
   bool _isLoading = false;
-  String? _error;
+  AppError? _error;
 
   StreamsProvider(DomainService domainService) {
     _apiService = ApiService(domainService);
@@ -31,7 +32,7 @@ class StreamsProvider extends ChangeNotifier {
   String? get selectedCategory => _selectedCategory;
   SortOption get sortOption => _sortOption;
   bool get isLoading => _isLoading;
-  String? get error => _error;
+  AppError? get error => _error;
 
   /// Streams filtered by selected category and sorted
   List<SportStream> get filteredStreams {
@@ -92,7 +93,7 @@ class StreamsProvider extends ChangeNotifier {
       });
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
+      _error = ErrorUtils.fromException(e);
       notifyListeners();
     }
   }
@@ -109,7 +110,7 @@ class StreamsProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _isLoading = false;
-      _error = e.toString();
+      _error = ErrorUtils.fromException(e);
       notifyListeners();
     }
   }

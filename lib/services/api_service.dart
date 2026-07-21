@@ -76,7 +76,7 @@ class ApiService {
       _putInCache(cacheKey, stream);
       return stream;
     } else if (response.statusCode == 404) {
-      return null; // Stream not live
+      return null;
     }
     throw ApiException('Failed to fetch stream: ${response.statusCode}');
   }
@@ -140,7 +140,6 @@ class ApiService {
 class _CacheEntry {
   final dynamic data;
   final DateTime timestamp;
-
   _CacheEntry({required this.data, required this.timestamp});
 }
 

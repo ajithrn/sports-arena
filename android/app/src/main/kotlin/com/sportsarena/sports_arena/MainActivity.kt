@@ -8,9 +8,13 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
+import androidx.webkit.ProxyConfig
+import androidx.webkit.ProxyController
+import androidx.webkit.WebViewFeature
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.Executor
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.sportsarena/platform"
@@ -49,9 +53,51 @@ class MainActivity : FlutterActivity() {
                             result.success(false)
                         }
                     }
+                    "setWebViewProxy" -> {
+                        val host = call.argument<String>("host") ?: "localhost"
+                        val port = call.argument<Int>("port") ?: 0
+                        setProxy(host, port, result)
+                    }
+                    "clearWebViewProxy" -> {
+                        clearProxy(result)
+                    }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun setProxy(host: String, port: Int, result: MethodChannel.Result) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+            result.success(false)
+            return
+        }
+        try {
+            val proxyConfig = ProxyConfig.Builder()
+                .addProxyRule("$host:$port")
+                .removeImplicitRules()  // Allow proxy to handle all connections including localhost
+                .build()
+            val executor = Executor { it.run() }
+            ProxyController.getInstance().setProxyOverride(proxyConfig, executor) {
+                result.success(true)
+            }
+        } catch (e: Exception) {
+            result.success(false)
+        }
+    }
+
+    private fun clearProxy(result: MethodChannel.Result) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+            result.success(false)
+            return
+        }
+        try {
+            val executor = Executor { it.run() }
+            ProxyController.getInstance().clearProxyOverride(executor) {
+                result.success(true)
+            }
+        } catch (e: Exception) {
+            result.success(false)
+        }
     }
 
     private fun findWebView(view: View): WebView? {

@@ -421,8 +421,16 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              provider.error!,
-              style: Theme.of(context).textTheme.bodySmall,
+              provider.error!.displayMessage,
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              provider.error!.displayCode,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
@@ -483,7 +491,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final gridWidth = screenWidth - 32 - (crossAxisCount - 1) * 12; // padding + gaps
     final cardWidth = gridWidth / crossAxisCount;
     final thumbnailHeight = cardWidth * 9 / 16; // 16:9
-    final infoHeight = isTv ? 100.0 : 90.0; // text (up to 2 lines) + badge + padding
+    final infoHeight = isTv ? 100.0 : 94.0; // text (up to 2 lines) + badge + padding
     final cardHeight = thumbnailHeight + infoHeight;
 
     return RefreshIndicator(

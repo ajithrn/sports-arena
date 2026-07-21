@@ -18,6 +18,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isValidating = false;
   String? _errorMessage;
+  String? _pendingDomain;
 
   @override
   void dispose() {
@@ -55,30 +56,35 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         // Verify it returns valid JSON with categories
         final data = json.decode(response.body);
         if (data['categories'] != null && data['categories'] is List) {
-          // Save the domain
-          final domainService = await DomainService.getInstance();
-          await domainService.setDomain(normalized);
-
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const HomeScreen()),
-            );
-          }
+          await _saveDomainAndProceed(normalized);
           return;
         }
       }
 
       setState(() {
-        _errorMessage = 'Could not connect. Make sure the domain is correct and the API is accessible.';
+        _errorMessage = 'Could not verify the server. You can still continue and change it later in Settings.';
+        _pendingDomain = normalized;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Connection failed. Check the domain and your internet connection.';
+        _errorMessage = 'Connection failed. You can still continue and change it later in Settings.';
+        _pendingDomain = domain.startsWith('http') ? domain : 'https://$domain';
       });
     } finally {
       if (mounted) {
         setState(() => _isValidating = false);
       }
+    }
+  }
+
+  Future<void> _saveDomainAndProceed(String domain) async {
+    final domainService = await DomainService.getInstance();
+    await domainService.setDomain(domain);
+
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
     }
   }
 
@@ -194,6 +200,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      // Allow user to continue without validation
+                      if (_pendingDomain != null)
+                        OutlinedButton.icon(
+                          onPressed: () => _saveDomainAndProceed(_pendingDomain!),
+                          icon: const Icon(Icons.arrow_forward, size: 18),
+                          label: const Text('Continue anyway'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 44),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 16),
                     ],
 

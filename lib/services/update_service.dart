@@ -31,7 +31,6 @@ class UpdateService {
         final data = json.decode(response.body);
         final tagName = data['tag_name'] as String? ?? '';
         final latestVersion = tagName.replaceFirst('v', '');
-        final body = data['body'] as String? ?? '';
 
         // Find the correct download URL based on platform
         String downloadUrl = data['html_url'] ?? '';
@@ -40,53 +39,70 @@ class UpdateService {
 
         final hasUpdate = _isNewerVersion(latestVersion, AppConfig.appVersion);
 
+        // Fetch the commit message for the release tag
+        String releaseNotes = '';
+        if (hasUpdate) {
+          releaseNotes = await _getTagCommitMessage(latestVersion);
+        }
+
         return UpdateInfo(
           latestVersion: latestVersion,
           downloadUrl: downloadUrl,
-          releaseNotes: body,
+          releaseNotes: releaseNotes,
           hasUpdate: hasUpdate,
         );
       }
 
-      return UpdateInfo(
-        latestVersion: AppConfig.appVersion,
-        downloadUrl: '',
-        releaseNotes: '',
-        hasUpdate: false,
-      );
+      return _noUpdate();
     } catch (e) {
-      return UpdateInfo(
+      return _noUpdate();
+    }
+  }
+
+  static UpdateInfo _noUpdate() => UpdateInfo(
         latestVersion: AppConfig.appVersion,
         downloadUrl: '',
         releaseNotes: '',
         hasUpdate: false,
       );
+
+  /// Get the commit message for a release tag
+  static Future<String> _getTagCommitMessage(String version) async {
+    try {
+      final url = '${AppConfig.githubApiUrl}/git/refs/tags/v$version';
+      final res = await http.get(Uri.parse(url), headers: {
+        'Accept': 'application/vnd.github.v3+json',
+      }).timeout(const Duration(seconds: 5));
+      if (res.statusCode != 200) return '';
+
+      final sha = json.decode(res.body)['object']?['sha'] as String? ?? '';
+      if (sha.isEmpty) return '';
+
+      final commitRes = await http.get(
+        Uri.parse('${AppConfig.githubApiUrl}/commits/$sha'),
+        headers: {'Accept': 'application/vnd.github.v3+json'},
+      ).timeout(const Duration(seconds: 5));
+      if (commitRes.statusCode != 200) return '';
+
+      return json.decode(commitRes.body)['commit']?['message'] as String? ?? '';
+    } catch (_) {
+      return '';
     }
   }
 
   /// Find the correct asset download URL for the current platform
   static String _findPlatformAsset(List assets, String fallbackUrl) {
-    String suffix;
-    if (kIsWeb) {
-      return fallbackUrl; // Web users go to release page
-    }
+    if (kIsWeb) return fallbackUrl;
 
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        suffix = '.apk';
-        break;
-      case TargetPlatform.macOS:
-        suffix = '-macos.dmg';
-        break;
-      case TargetPlatform.windows:
-        suffix = '-windows.zip';
-        break;
-      case TargetPlatform.linux:
-        suffix = '-linux';
-        break;
-      default:
-        return fallbackUrl;
-    }
+    final suffix = switch (defaultTargetPlatform) {
+      TargetPlatform.android => '.apk',
+      TargetPlatform.macOS => '-macos.dmg',
+      TargetPlatform.windows => '-windows.zip',
+      TargetPlatform.linux => '-linux',
+      _ => '',
+    };
+
+    if (suffix.isEmpty) return fallbackUrl;
 
     for (final asset in assets) {
       final name = (asset['name'] as String? ?? '').toLowerCase();
