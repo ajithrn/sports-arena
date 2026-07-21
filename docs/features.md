@@ -27,29 +27,43 @@
 - Native MotionEvent tap on Android TV for trusted play/pause interaction
 
 ## Ad/Popup Blocking
+- **Proxy-level domain blocking**: known ad/tracking domains (tanktds.com, adclickad.com, etc.) are rejected at the CONNECT proxy with 502 — scripts never load, no bandwidth wasted
+- **JS overlay remover**: MutationObserver-based script removes fixed/absolute positioned elements with high z-index that cover the viewport but aren't the video player; runs on timer + DOM mutation observer for dynamically injected overlays
 - **Web**: Global JavaScript in index.html overrides window.open, blocks _blank links, auto-refocuses if a new tab steals focus
 - **Android**: Navigation delegate blocks known ad domains, JS injection kills window.open and _blank links
 - No sandbox on iframe (streaming server requires it absent)
+- Two-layer approach: static blocklist catches known offenders fast; JS remover adapts to any new ad network by behavior (position + z-index + size)
 
 ## Networking & Reliability
 - 10-second timeout on all API requests (prevents hangs on unresponsive servers)
 - In-memory cache (60s streams, 300s categories) reduces redundant requests
 - Custom User-Agent header identifies app version and platform to server
 - Faster splash screen for returning users (800ms vs 2s for first launch)
+- **DNS bypass proxy** — local CONNECT proxy resolves domains via DoH and fragments TLS ClientHello (with per-fragment flush) to bypass ISP DNS poisoning and SNI-based DPI
+- **DoH fallback rotation** — tries primary server, then cycles through fallbacks (Cloudflare, Cloudflare IP, Google, Google IP, NextDNS) so blocking one DoH provider doesn't break the app
+- **IP-based DoH fallbacks** — 1.1.1.1 and 8.8.8.8 skip DNS for the DoH server itself, solving the chicken-and-egg problem on devices where DoH hostnames can't be resolved
+- **Configurable DoH servers** — Cloudflare, Cloudflare (IP), Google, Google (IP), NextDNS
+- **Android WebView proxy** — routes embed player traffic through bypass proxy via ProxyController with `removeImplicitRules()`
+- **macOS system proxy** — sets system HTTPS proxy via `networksetup` (no admin prompt, requires sandbox disabled) for WKWebView bypass
+- Automatic fallback to direct connection when proxy is disabled
+- 5-second DoH timeout per server (increased from 3s for reliability)
 
 ## Settings
 - **Server**: View current domain, test connection, change server
 - **Appearance**: Dark / Light / System theme
+- **Network**: DNS proxy toggle (enabled by default), DoH server picker
 - **Defaults**: Default category filter, auto-refresh toggle + interval (30s/60s/2min/5min)
 - **Data & Cache**: Clear stream cache manually
 - **About**: App name/version, help & tips, check for updates
 - **Update**: In-app download with progress bar on Android, browser fallback on other platforms
+- **Responsive layout**: 2-column (700px+) or 3-column (1000px+) grid on wide screens
 
 ## Onboarding
 - Clean domain entry screen
 - Validates domain by testing /api/v1/categories endpoint
 - Auto-adds https:// and strips trailing slashes
 - Shows error messages for invalid/unreachable domains
+- **"Continue anyway" button** when validation fails — users can set domain later in settings
 - Domain persisted via SharedPreferences
 - Quick tips section with platform-aware usage hints
 

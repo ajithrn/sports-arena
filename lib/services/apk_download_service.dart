@@ -13,7 +13,7 @@ class ApkDownloadService {
   /// Downloads an APK from [url] and triggers installation.
   ///
   /// [onProgress] reports download progress as a value between 0.0 and 1.0.
-  /// [onStatusChange] reports status messages (e.g. "Downloading...", "Installing...").
+  /// [onStatusChange] reports status messages.
   /// Returns true if the install was triggered successfully.
   static Future<bool> downloadAndInstall({
     required String url,
@@ -21,16 +21,16 @@ class ApkDownloadService {
     required void Function(String status) onStatusChange,
   }) async {
     try {
-      // Request necessary permissions
-      final hasPermission = await _requestPermissions();
+      // Step 1: Request install-from-unknown-sources permission
+      final hasPermission = await _requestInstallPermission(onStatusChange);
       if (!hasPermission) {
-        onStatusChange('Permission denied');
+        onStatusChange('Install permission denied. Please allow "Install unknown apps" for Sports Arena in Settings.');
         return false;
       }
 
       onStatusChange('Starting download...');
 
-      // Get download directory
+      // Step 2: Get a download directory accessible to the package installer
       final dir = await _getDownloadDirectory();
       final filePath = '${dir.path}/sports_arena_update.apk';
 
@@ -40,7 +40,7 @@ class ApkDownloadService {
         await oldFile.delete();
       }
 
-      // Download the APK
+      // Step 3: Download the APK
       _cancelToken = CancelToken();
       await _dio.download(
         url,
@@ -58,27 +58,39 @@ class ApkDownloadService {
       );
 
       onProgress(1.0);
-      onStatusChange('Download complete. Installing...');
+      onStatusChange('Download complete. Opening installer...');
 
-      // Trigger APK installation
-      final result = await OpenFilex.open(filePath, type: 'application/vnd.android.package-archive');
+      // Step 4: Trigger APK installation via open_filex
+      // open_filex handles FileProvider content URI creation internally
+      final result = await OpenFilex.open(
+        filePath,
+        type: 'application/vnd.android.package-archive',
+      );
 
       if (result.type == ResultType.done) {
         onStatusChange('Installation started');
         return true;
+      } else if (result.type == ResultType.permissionDenied) {
+        // This means the app doesn't have permission to install packages
+        // Guide user to enable it manually
+        onStatusChange('Permission denied. Go to Settings > Apps > Sports Arena > Install unknown apps and enable it.');
+        // Try to open app settings so user can grant permission
+        await openAppSettings();
+        return false;
       } else {
-        onStatusChange('Could not open APK: ${result.message}');
+        onStatusChange('Could not open installer: ${result.message}');
         return false;
       }
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
         onStatusChange('Download cancelled');
       } else {
-        onStatusChange('Download failed: ${e.message}');
+        onStatusChange('Download failed. Check your connection.');
       }
       return false;
     } catch (e) {
-      onStatusChange('Error: $e');
+      debugPrint('APK install error: $e');
+      onStatusChange('Update failed. Try downloading from the browser instead.');
       return false;
     }
   }
@@ -89,51 +101,56 @@ class ApkDownloadService {
     _cancelToken = null;
   }
 
-  /// Request storage and install permissions.
-  static Future<bool> _requestPermissions() async {
-    // On Android 8+, we need REQUEST_INSTALL_PACKAGES (declared in manifest,
-    // but user must grant it). Check and request it.
-    if (Platform.isAndroid) {
-      // Request install packages permission
-      final installStatus = await Permission.requestInstallPackages.request();
-      if (!installStatus.isGranted) {
-        debugPrint('Install packages permission denied');
-        return false;
-      }
+  /// Request permission to install from unknown sources (Android 8+).
+  /// On older versions, this is a global toggle and doesn't need per-app permission.
+  static Future<bool> _requestInstallPermission(
+    void Function(String status) onStatusChange,
+  ) async {
+    if (!Platform.isAndroid) return true;
 
-      // For Android < 10, request storage permission
-      if (await _needsStoragePermission()) {
-        final storageStatus = await Permission.storage.request();
-        if (!storageStatus.isGranted) {
-          debugPrint('Storage permission denied');
-          return false;
-        }
-      }
+    // Check current status
+    var status = await Permission.requestInstallPackages.status;
+
+    if (status.isGranted) return true;
+
+    // Request the permission - this opens the system settings page
+    // on Android 8+ where user must manually toggle "Allow from this source"
+    onStatusChange('Requesting install permission...');
+    status = await Permission.requestInstallPackages.request();
+
+    if (status.isGranted) return true;
+
+    // If permanently denied, direct user to app settings
+    if (status.isPermanentlyDenied) {
+      onStatusChange('Opening settings to grant install permission...');
+      await openAppSettings();
+      // Re-check after user returns
+      await Future.delayed(const Duration(seconds: 2));
+      status = await Permission.requestInstallPackages.status;
+      return status.isGranted;
     }
 
-    return true;
-  }
-
-  /// Check if we need explicit storage permission (Android 9 and below).
-  static Future<bool> _needsStoragePermission() async {
-    // On Android 10+ (API 29+), we use app-specific directories and don't need
-    // WRITE_EXTERNAL_STORAGE. On older versions, we do.
-    // The permission_handler library handles this gracefully.
-    final status = await Permission.storage.status;
-    return !status.isGranted && !status.isRestricted;
+    return false;
   }
 
   /// Get a suitable directory for downloading the APK.
+  /// Uses external cache which is accessible by the package installer
+  /// via FileProvider without needing storage permissions.
   static Future<Directory> _getDownloadDirectory() async {
-    // Use external cache directory on Android - it doesn't require permissions
-    // on Android 10+ and is accessible by the package installer.
     if (Platform.isAndroid) {
-      final externalDir = await getExternalStorageDirectory();
-      if (externalDir != null) {
-        return externalDir;
+      // Prefer external cache - accessible via FileProvider and doesn't
+      // require storage permissions on any Android version
+      final externalDirs = await getExternalCacheDirectories();
+      if (externalDirs != null && externalDirs.isNotEmpty) {
+        return externalDirs.first;
       }
+
+      // Fallback to app's external storage directory
+      final externalDir = await getExternalStorageDirectory();
+      if (externalDir != null) return externalDir;
     }
-    // Fallback to temporary directory
+
+    // Last resort fallback
     return await getTemporaryDirectory();
   }
 }

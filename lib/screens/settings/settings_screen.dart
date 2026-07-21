@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../config/app_config.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/streams_provider.dart';
+import '../../services/dns_bypass_service.dart';
 import '../../services/domain_service.dart';
 import '../../services/update_service.dart';
 import '../../services/apk_download_service.dart';
@@ -192,39 +193,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    final screenWidth = MediaQuery.of(context).size.width;
+    final useWideLayout = screenWidth > 700;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
+        scrolledUnderElevation: 0,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Server section
-          _buildSectionHeader('Server'),
-          _buildServerCard(),
-          const SizedBox(height: 24),
+      body: useWideLayout
+          ? _buildWideLayout(settings)
+          : _buildNarrowLayout(settings),
+    );
+  }
 
-          // Appearance section
-          _buildSectionHeader('Appearance'),
-          _buildThemeCard(settings),
-          const SizedBox(height: 24),
+  Widget _buildNarrowLayout(SettingsProvider settings) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildSectionHeader('Server'),
+        _buildServerCard(),
+        const SizedBox(height: 20),
+        _buildSectionHeader('Appearance'),
+        _buildThemeCard(settings),
+        const SizedBox(height: 20),
+        _buildSectionHeader('Defaults'),
+        _buildDefaultsCard(settings),
+        const SizedBox(height: 20),
+        _buildSectionHeader('Data & Cache'),
+        _buildCacheCard(settings),
+        const SizedBox(height: 20),
+        _buildSectionHeader('Network'),
+        _buildProxyCard(settings),
+        const SizedBox(height: 20),
+        _buildSectionHeader('About'),
+        _buildAboutCard(),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
 
-          // Defaults section
-          _buildSectionHeader('Defaults'),
-          _buildDefaultsCard(settings),
-          const SizedBox(height: 24),
+  Widget _buildWideLayout(SettingsProvider settings) {
+    const columns = 2;
 
-          // Cache section
-          _buildSectionHeader('Data & Cache'),
-          _buildCacheCard(settings),
-          const SizedBox(height: 24),
+    // Group sections into rows for consistent heights
+    final sections = [
+      _buildSectionWithHeader('Server', _buildServerCard()),
+      _buildSectionWithHeader('Appearance', _buildThemeCard(settings)),
+      _buildSectionWithHeader('Network', _buildProxyCard(settings)),
+      _buildSectionWithHeader('Defaults', _buildDefaultsCard(settings)),
+      _buildSectionWithHeader('Data & Cache', _buildCacheCard(settings)),
+      _buildSectionWithHeader('About', _buildAboutCard()),
+    ];
 
-          // About section
-          _buildSectionHeader('About'),
-          _buildAboutCard(),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+
+        // Split sections into rows of 2
+        final rows = <List<Widget>>[];
+        for (int i = 0; i < sections.length; i += columns) {
+          rows.add(sections.sublist(i, (i + columns).clamp(0, sections.length)));
+        }
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: rows.map((row) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (int i = 0; i < row.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 16),
+                        Expanded(child: row[i]),
+                      ],
+                      // Fill remaining space if row is incomplete
+                      if (row.length < columns) ...[
+                        const SizedBox(width: 16),
+                        const Expanded(child: SizedBox()),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionWithHeader(String title, Widget card) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(title),
+        Expanded(child: card),
+      ],
     );
   }
 
@@ -425,6 +492,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildProxyCard(SettingsProvider settings) {
+    return Card(
+      child: Column(
+        children: [
+          SwitchListTile(
+            secondary: const Icon(Icons.shield_outlined),
+            title: const Text('DNS Proxy'),
+            subtitle: Text(
+              settings.proxyEnabled
+                  ? 'Bypasses ISP DNS blocking'
+                  : 'Using system DNS',
+            ),
+            value: settings.proxyEnabled,
+            onChanged: (value) async {
+              await settings.setProxyEnabled(value);
+              await DnsBypassService().setEnabled(value);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(value
+                        ? 'DNS proxy enabled. Restart app for full effect.'
+                        : 'DNS proxy disabled. Restart app for full effect.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+          ),
+          if (settings.proxyEnabled)
+            ListTile(
+              leading: const Icon(Icons.dns_outlined),
+              title: const Text('DNS Server'),
+              subtitle: Text(settings.dohServerName),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showDnsServerPicker(settings),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showDnsServerPicker(SettingsProvider settings) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('DNS Server'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: SettingsProvider.dohServers.entries.map((entry) {
+            final isSelected = entry.value == settings.dohServer;
+            return ListTile(
+              title: Text(entry.key),
+              subtitle: Text(entry.value, style: const TextStyle(fontSize: 12)),
+              leading: Icon(
+                isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                color: isSelected ? Theme.of(ctx).colorScheme.primary : null,
+              ),
+              onTap: () {
+                settings.setDohServer(entry.value);
+                DnsBypassService().setDohServer(entry.value);
+                DnsBypassService().clearCache();
+                Navigator.pop(ctx);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildAboutCard() {
     return Card(
       child: Column(
@@ -474,40 +611,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (updateInfo.hasUpdate) {
       showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Update Available'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('New version: ${updateInfo.latestVersion}'),
-              Text('Current: ${AppConfig.appVersion}'),
-              if (updateInfo.releaseNotes.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                const Text('Release notes:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(
-                  updateInfo.releaseNotes,
-                  maxLines: 10,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Later'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _openDownloadUrl(updateInfo.downloadUrl);
-              },
-              child: const Text('Download'),
-            ),
-          ],
+        builder: (ctx) => _UpdateDialog(
+          updateInfo: updateInfo,
+          onDownload: () {
+            Navigator.pop(ctx);
+            _openDownloadUrl(updateInfo.downloadUrl);
+          },
         ),
       );
     } else {
@@ -556,71 +665,249 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _downloadAndInstallApk(String url) {
-    double progress = 0;
-    String status = 'Preparing download...';
-    bool isCancelled = false;
-
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          // Start the download when dialog first builds
-          if (progress == 0 && status == 'Preparing download...') {
-            ApkDownloadService.downloadAndInstall(
-              url: url,
-              onProgress: (p) {
-                if (!isCancelled) {
-                  setDialogState(() => progress = p);
-                }
-              },
-              onStatusChange: (s) {
-                if (!isCancelled) {
-                  setDialogState(() => status = s);
-                }
-              },
-            ).then((success) {
-              if (!isCancelled && ctx.mounted) {
-                Navigator.of(ctx).pop();
-                if (!success && status != 'Download cancelled') {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(
-                      content: Text(status),
-                      behavior: SnackBarBehavior.floating,
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            });
+      builder: (ctx) => _DownloadProgressDialog(
+        url: url,
+        onDone: (success, status) {
+          if (!success && status != 'Download cancelled') {
+            ScaffoldMessenger.of(ctx).showSnackBar(
+              SnackBar(
+                content: Text(status),
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: Colors.red,
+              ),
+            );
           }
+        },
+      ),
+    );
+  }
+}
 
-          return AlertDialog(
-            title: const Text('Downloading Update'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LinearProgressIndicator(value: progress > 0 ? progress : null),
-                const SizedBox(height: 16),
+// ──────────────────────────────────────────────
+// Update Available Dialog
+// ──────────────────────────────────────────────
+
+class _UpdateDialog extends StatelessWidget {
+  final UpdateInfo updateInfo;
+  final VoidCallback onDownload;
+
+  const _UpdateDialog({required this.updateInfo, required this.onDownload});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with icon
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.system_update,
+                      color: theme.colorScheme.onPrimaryContainer,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Update Available',
+                          style: theme.textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'v${AppConfig.appVersion} → v${updateInfo.latestVersion}',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              // Release notes (commit message)
+              if (updateInfo.releaseNotes.isNotEmpty) ...[
+                const SizedBox(height: 20),
                 Text(
-                  status,
-                  style: const TextStyle(fontSize: 13),
-                  textAlign: TextAlign.center,
+                  "What's new",
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Text(
+                      updateInfo.releaseNotes,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
                 ),
               ],
+
+              // Actions
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Later'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: onDownload,
+                    icon: const Icon(Icons.download, size: 18),
+                    label: const Text('Update'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ──────────────────────────────────────────────
+// Download Progress Dialog
+// ──────────────────────────────────────────────
+
+class _DownloadProgressDialog extends StatefulWidget {
+  final String url;
+  final void Function(bool success, String status) onDone;
+
+  const _DownloadProgressDialog({required this.url, required this.onDone});
+
+  @override
+  State<_DownloadProgressDialog> createState() => _DownloadProgressDialogState();
+}
+
+class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
+  double _progress = 0;
+  String _status = 'Preparing download...';
+  bool _started = false;
+  bool _isCancelled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startDownload();
+  }
+
+  void _startDownload() {
+    if (_started) return;
+    _started = true;
+
+    ApkDownloadService.downloadAndInstall(
+      url: widget.url,
+      onProgress: (p) {
+        if (!_isCancelled && mounted) {
+          setState(() => _progress = p);
+        }
+      },
+      onStatusChange: (s) {
+        if (!_isCancelled && mounted) {
+          setState(() => _status = s);
+        }
+      },
+    ).then((success) {
+      if (!_isCancelled && mounted) {
+        Navigator.of(context).pop();
+        widget.onDone(success, _status);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final percent = (_progress * 100).toInt();
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Progress indicator
+            SizedBox(
+              width: 80,
+              height: 80,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    value: _progress > 0 ? _progress : null,
+                    strokeWidth: 6,
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                  ),
+                  if (_progress > 0)
+                    Text(
+                      '$percent%',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                ],
+              ),
             ),
-            actions: [
+
+            const SizedBox(height: 20),
+
+            Text(
+              _progress >= 1.0 ? 'Installing...' : 'Downloading Update',
+              style: theme.textTheme.titleMedium,
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              _status,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+
+            const SizedBox(height: 20),
+
+            // Cancel button
+            if (_progress < 1.0)
               TextButton(
                 onPressed: () {
-                  isCancelled = true;
+                  _isCancelled = true;
                   ApkDownloadService.cancelDownload();
-                  Navigator.of(ctx).pop();
+                  Navigator.of(context).pop();
                 },
                 child: const Text('Cancel'),
               ),
-            ],
-          );
-        },
+          ],
+        ),
       ),
     );
   }

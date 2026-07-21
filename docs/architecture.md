@@ -23,7 +23,10 @@ lib/
 │   └── category_model.dart            # SportCategory with icons
 ├── services/
 │   ├── api_service.dart               # HTTP client with in-memory cache
-│   └── domain_service.dart            # Domain persistence (SharedPreferences)
+│   ├── dns_bypass_service.dart        # CONNECT proxy with DoH + TLS fragmentation
+│   ├── domain_service.dart            # Domain persistence (SharedPreferences)
+│   ├── apk_download_service.dart      # APK download & install for Android updates
+│   └── update_service.dart            # GitHub release version checker
 ├── providers/
 │   ├── streams_provider.dart          # Stream list, filtering, sorting
 │   └── settings_provider.dart         # Theme, default category, auto-refresh
@@ -45,6 +48,7 @@ lib/
 │   └── loading_grid.dart              # Shimmer loading skeleton
 └── utils/
     ├── platform_utils.dart            # Web/Android/Desktop/TV detection
+    ├── error_utils.dart               # User-friendly error mapping (AppError)
     └── time_utils.dart                # Time formatting, viewer count
 ```
 
@@ -55,6 +59,34 @@ User enters domain → DomainService saves it
                    → ApiService uses it for all HTTP calls
                    → StreamsProvider fetches streams/categories
                    → UI rebuilds via Consumer<StreamsProvider>
+```
+
+## DNS Bypass Flow
+
+```
+App starts → DnsBypassService starts CONNECT proxy on localhost
+           → HttpOverrides.global routes all Dart HTTP through it
+           → Android: ProxyController (with removeImplicitRules) routes WebView through it
+           → macOS: system proxy set via networksetup
+
+When a request arrives at the proxy:
+  1. Client sends CONNECT example.com:443
+  2. Proxy checks domain against ad blocklist → if blocked, return 502 immediately
+  3. Proxy resolves domain via DoH (tries primary, then fallbacks):
+     - Primary: user-selected server (e.g., cloudflare-dns.com)
+     - Fallbacks: 1.1.1.1, dns.google, 8.8.8.8, dns.nextdns.io
+     - IP-based endpoints skip DNS for the DoH server itself (avoids chicken-and-egg)
+  4. Proxy connects to the DoH-resolved IP on port 443
+  5. Proxy fragments the TLS ClientHello into 5-byte segments with flush()
+     after each fragment (forces separate TCP segments, bypasses SNI-based DPI)
+  6. Proxy pipes all data bidirectionally (transparent tunnel)
+  7. Client does TLS handshake through tunnel with correct SNI
+  8. ISP can't read SNI from fragmented packets → connection succeeds
+
+Ad overlay prevention (two layers):
+  - Proxy blocklist: known ad domains get 502'd before connecting (fast, saves bandwidth)
+  - JS overlay remover: MutationObserver strips high-z-index overlays covering the player
+    (catches new/unknown ad domains that bypass the static blocklist)
 ```
 
 ## Caching Strategy
@@ -100,7 +132,10 @@ User enters domain → DomainService saves it
 - Player uses `webview_flutter_wkwebview` (WKWebView)
 - `WebKitWebViewControllerCreationParams` with `allowsInlineMediaPlayback: true`
 - `mediaTypesRequiringUserAction` set to empty for autoplay
-- App sandbox entitlements with `com.apple.security.network.client`
+- App sandbox disabled (`com.apple.security.app-sandbox = false`) — required for `networksetup` to execute
+- `com.apple.security.network.client` and `com.apple.security.network.server` entitlements
+- System proxy set via `networksetup` directly (no admin prompt) for WKWebView DNS bypass
+- Proxy cleared on app exit via `applicationWillTerminate`
 - Native window fullscreen via `window_manager`
 - Keyboard shortcuts: F, Esc, Cmd+F
 

@@ -79,6 +79,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
           onPageFinished: (url) {
             if (mounted) setState(() => _isLoading = false);
             _injectPopupBlocker();
+            _injectOverlayRemover();
             _injectAutoplay();
             if (PlatformUtils.isTv) {
               _injectTvKeyboardHandler();
@@ -104,6 +105,11 @@ class PlayerWidgetState extends State<PlayerWidget> {
       final androidController =
           _controller.platform as AndroidWebViewController;
       androidController.setMediaPlaybackRequiresUserGesture(false);
+      // Enable third-party cookies — embed players often need them
+      final cookieManager = AndroidWebViewCookieManager(
+        const PlatformWebViewCookieManagerCreationParams(),
+      );
+      cookieManager.setAcceptThirdPartyCookies(androidController, true);
     }
   }
 
@@ -288,6 +294,91 @@ class PlayerWidgetState extends State<PlayerWidget> {
             }
           }
         }, true);
+      })();
+    ''');
+  }
+
+  /// Removes ad overlay elements that sit on top of the video player.
+  /// These overlays intercept clicks so the play button doesn't work.
+  /// Instead of blocking ad domains (which change constantly), we remove
+  /// any suspicious overlays directly from the DOM.
+  void _injectOverlayRemover() {
+    _controller.runJavaScript('''
+      (function() {
+        function removeOverlays() {
+          // Remove fixed/absolute positioned elements covering the viewport
+          // that aren't part of the video player itself
+          var playerSelectors = ['video', '.jw-wrapper', '.jwplayer', '.video-js', '.plyr', '[class*="player"]'];
+          var allEls = document.querySelectorAll('div, iframe, a, span');
+          
+          for (var i = 0; i < allEls.length; i++) {
+            var el = allEls[i];
+            var style = window.getComputedStyle(el);
+            var pos = style.position;
+            var zIndex = parseInt(style.zIndex) || 0;
+            
+            // Target: high z-index, fixed/absolute, covers most of viewport
+            if ((pos === 'fixed' || pos === 'absolute') && zIndex > 100) {
+              var rect = el.getBoundingClientRect();
+              var coversViewport = rect.width > window.innerWidth * 0.5 && 
+                                   rect.height > window.innerHeight * 0.5;
+              
+              if (coversViewport) {
+                // Check it's not the actual player
+                var isPlayer = false;
+                for (var j = 0; j < playerSelectors.length; j++) {
+                  if (el.matches(playerSelectors[j]) || el.querySelector(playerSelectors[j])) {
+                    isPlayer = true;
+                    break;
+                  }
+                }
+                if (!isPlayer) {
+                  el.remove();
+                }
+              }
+            }
+          }
+          
+          // Remove common ad overlay patterns by attribute/class hints
+          var adSelectors = [
+            '[id*="overlay" i]:not([class*="player"])',
+            '[class*="overlay" i]:not([class*="player"]):not([class*="jw"])',
+            '[id*="preroll" i]',
+            '[class*="preroll" i]',
+            '[id*="adcontainer" i]',
+            '[class*="adcontainer" i]',
+            'div[onclick][style*="z-index"]',
+            'a[target="_blank"][style*="position"]'
+          ];
+          
+          for (var k = 0; k < adSelectors.length; k++) {
+            try {
+              var ads = document.querySelectorAll(adSelectors[k]);
+              for (var m = 0; m < ads.length; m++) {
+                var ad = ads[m];
+                // Only remove if it doesn't contain a video element
+                if (!ad.querySelector('video') && !ad.querySelector('.jwplayer')) {
+                  ad.remove();
+                }
+              }
+            } catch(e) {}
+          }
+        }
+        
+        // Run multiple times as ads inject dynamically
+        setTimeout(removeOverlays, 500);
+        setTimeout(removeOverlays, 1500);
+        setTimeout(removeOverlays, 3000);
+        setTimeout(removeOverlays, 5000);
+        
+        // Also observe DOM changes and remove new overlays
+        var observer = new MutationObserver(function(mutations) {
+          setTimeout(removeOverlays, 100);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        
+        // Stop observing after 30s to avoid performance issues
+        setTimeout(function() { observer.disconnect(); }, 30000);
       })();
     ''');
   }

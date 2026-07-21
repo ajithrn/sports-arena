@@ -14,6 +14,10 @@ Live sports streaming app built with Flutter. Supports Android (phone + TV), mac
 - Configurable streaming server
 - Auto-refresh, pull-to-refresh
 - Ad/popup blocking
+- DNS bypass proxy — works on ISPs that block streaming sites (DNS poisoning + SNI inspection)
+- DoH fallback rotation with IP-based fallbacks (works even when ISP blocks DoH hostnames)
+- Proxy-level ad blocking and JS overlay removal
+- Configurable DoH (DNS-over-HTTPS) servers
 
 ## Documentation
 
@@ -24,6 +28,7 @@ Detailed docs are in the [docs/](docs/) folder:
 - [Development](docs/development.md)
 - [Architecture](docs/architecture.md)
 - [Features](docs/features.md)
+- [Proxy / DNS Bypass](docs/proxy.md)
 - [Deployment](docs/deployment.md)
 - [Releasing](docs/releasing.md)
 - [Linux Build](docs/linux-build.md)
@@ -37,6 +42,18 @@ Detailed docs are in the [docs/](docs/) folder:
 - **Linux:** Build from source — see [Linux Build Instructions](docs/linux-build.md)
 - **ADB:** `adb install sports-arena-latest.apk`
 - **All releases:** [github.com/ajithrn/sports-arena/releases](https://github.com/ajithrn/sports-arena/releases)
+
+### macOS Installation Note
+
+macOS may block the app with a **"Sports Arena Not Opened"** warning since it's not notarized with Apple. To fix:
+
+1. Open Terminal and run:
+   ```bash
+   xattr -cr "/Applications/Sports Arena.app"
+   ```
+   (If you didn't move it to Applications, use the path where the app is located, e.g., `~/Downloads/Sports Arena.app`)
+
+2. Alternatively: **System Settings → Privacy & Security** → scroll down and click **Open Anyway**
 
 ### Platform Requirements
 
