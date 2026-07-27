@@ -89,6 +89,27 @@ class DnsBypassService {
     await _proxyServer?.close(force: true);
     _proxyServer = null;
     _port = 0;
+    // Clean up Windows user proxy on stop
+    await _clearWindowsProxy();
+  }
+
+  /// Remove the Windows user-level proxy setting so the system returns to
+  /// direct connections after the app exits or proxy is disabled.
+  Future<void> _clearWindowsProxy() async {
+    if (!Platform.isWindows) return;
+    try {
+      await Process.run('reg', [
+        'add',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
+        '/v', 'ProxyEnable',
+        '/t', 'REG_DWORD',
+        '/d', '0',
+        '/f',
+      ]);
+      debugPrint('Windows user proxy disabled');
+    } catch (e) {
+      debugPrint('Failed to clear Windows proxy: $e');
+    }
   }
 
   /// Enable/disable the service

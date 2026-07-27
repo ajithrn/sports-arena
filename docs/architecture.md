@@ -68,6 +68,7 @@ App starts → DnsBypassService starts CONNECT proxy on localhost
            → HttpOverrides.global routes all Dart HTTP through it
            → Android: ProxyController (with removeImplicitRules) routes WebView through it
            → macOS: system proxy set via networksetup
+           → Windows: user-level WinINET proxy set via registry (WebView2 respects it)
 
 When a request arrives at the proxy:
   1. Client sends CONNECT example.com:443
@@ -141,6 +142,11 @@ Ad overlay prevention (two layers):
 
 ### Windows
 - Player uses `webview_win_floating` (WebView2, implements webview_flutter API)
+- `WindowsWebViewControllerCreationParams` with writable `userDataFolder` (`getApplicationSupportDirectory()/webview2_data`) — WebView2 cannot create data folder in read-only install locations
+- Floating native window limitation: WebView2 renders on top of Flutter widgets, so Flutter cannot overlay controls above it
+- Player screen uses Column layout (solid header bar above WebView) instead of Stack overlay
+- User-level WinINET proxy set via registry (`HKCU\...\Internet Settings`) — routes WebView2 traffic through the CONNECT proxy for DoH DNS bypass (no admin required)
+- Proxy auto-cleared on app exit (`AppLifecycleListener`) and on service stop
 - Requires WebView2 Runtime (pre-installed on Windows 11, usually on Windows 10)
 - Native window fullscreen via `window_manager`
 - Keyboard shortcuts: F, Esc, Ctrl+F

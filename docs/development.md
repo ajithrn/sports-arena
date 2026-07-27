@@ -60,9 +60,11 @@ Create emulators via Android Studio Device Manager, or CLI:
 | File | Purpose |
 |------|---------|
 | `lib/config/app_config.dart` | API paths, cache durations, storage keys, app version |
-| `lib/main.dart` | Entry point, provider setup, desktop window init |
+| `lib/main.dart` | Entry point, provider setup, desktop window init, platform proxy config |
 | `lib/services/domain_service.dart` | User's server domain (stored locally) |
 | `lib/services/api_service.dart` | HTTP client with cache |
+| `lib/services/dns_bypass_service.dart` | CONNECT proxy with DoH, TLS fragmentation, ad blocking |
+| `lib/config/blocked_domains.dart` | Ad/tracking domains blocked at proxy level |
 | `lib/screens/player/player_widget.dart` | Conditional import (web vs native) |
 | `lib/screens/player/player_widget_native.dart` | Platform-aware WebView (Android/macOS/Windows) |
 | `lib/screens/player/player_screen.dart` | Player with fullscreen, keyboard shortcuts |

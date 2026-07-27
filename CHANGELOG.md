@@ -2,14 +2,20 @@
 
 ## 1.4.1 - 2026-07-27
 
-### Fixed
-- **Windows player not working** — WebView2 failed to initialize because no writable `userDataFolder` was configured; if the app was installed in a read-only location (e.g. `C:\Program Files\`) the player would silently fail to load
-- Windows WebView2 now uses `getApplicationSupportDirectory()/webview2_data` as its user data folder, ensuring cache/cookies/session data persist correctly
+### Added
+- **Windows user proxy** — sets WinINET registry proxy so WebView2 routes through DoH bypass (no admin required); auto-cleans on app exit
+- **Play/Pause button in player overlay** — fallback button in header bar beside fullscreen for Android TV when embed play button is unreliable via D-pad
 
 ### Changed
-- Player widget controller initialization is now async to support platform-specific setup that requires awaiting directory paths (Windows)
-- Added `webview_win_floating` import for `WindowsWebViewControllerCreationParams` access
-- Player shows loading indicator while WebView2 controller initializes on Windows
+- Windows player screen uses Column layout (header above WebView) instead of Stack overlay — webview_win_floating renders native window on top of Flutter so overlays are invisible
+- Windows WebView2 initialized with `WindowsWebViewControllerCreationParams` and writable `userDataFolder` for reliable operation from any install location
+- Player widget controller initialization is now async to support platform-specific setup (Windows path_provider)
+- D-pad focus chain on TV updated: Back ↔ Play/Pause ↔ Fullscreen (play/pause focused first on initial D-pad press)
+
+### Fixed
+- **Windows player not loading (`ERR_NAME_NOT_RESOLVED`)** — WebView2 was using system DNS which ISP blocks; now routes through local CONNECT proxy via user-level WinINET proxy setting
+- **Windows player header/controls invisible** — webview_win_floating native window covered Flutter overlay; switched to Column layout with solid header bar above WebView
+- **Windows WebView2 failing silently** — no writable `userDataFolder` configured; now uses `getApplicationSupportDirectory()/webview2_data`
 
 ## 1.4.0 - 2026-07-21
 

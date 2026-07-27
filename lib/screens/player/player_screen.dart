@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
@@ -26,6 +27,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Offset? _savedWindowPosition;
   final _playerKey = GlobalKey();
   final _backFocusNode = FocusNode(debugLabel: 'Back Button');
+  final _playPauseFocusNode = FocusNode(debugLabel: 'Play/Pause Button');
   final _fullscreenFocusNode = FocusNode(debugLabel: 'Fullscreen Button');
 
   @override
@@ -70,6 +72,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _hintTimer?.cancel();
     _overlayTimer?.cancel();
     _backFocusNode.dispose();
+    _playPauseFocusNode.dispose();
     _fullscreenFocusNode.dispose();
     if (_isDesktop || PlatformUtils.isTv) {
       HardwareKeyboard.instance.removeHandler(_hardwareKeyHandler);
@@ -172,7 +175,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           key == LogicalKeyboardKey.mediaPlay ||
           key == LogicalKeyboardKey.space) {
         // Only trigger play/pause if no button is currently focused
-        if (!_backFocusNode.hasFocus && !_fullscreenFocusNode.hasFocus) {
+        if (!_backFocusNode.hasFocus && !_playPauseFocusNode.hasFocus && !_fullscreenFocusNode.hasFocus) {
           _simulatePlayerClick();
           return KeyEventResult.handled;
         }
@@ -189,20 +192,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
           key == LogicalKeyboardKey.arrowRight ||
           key == LogicalKeyboardKey.arrowUp ||
           key == LogicalKeyboardKey.arrowDown) {
-        if (!_backFocusNode.hasFocus && !_fullscreenFocusNode.hasFocus) {
-          // Nothing focused — first press focuses fullscreen
-          _fullscreenFocusNode.requestFocus();
+        if (!_backFocusNode.hasFocus && !_playPauseFocusNode.hasFocus && !_fullscreenFocusNode.hasFocus) {
+          // Nothing focused — first press focuses play/pause (most useful action)
+          _playPauseFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
-        // Move between buttons
+        // Move between buttons: back ↔ play/pause ↔ fullscreen
         if (key == LogicalKeyboardKey.arrowLeft) {
           if (_fullscreenFocusNode.hasFocus) {
+            _playPauseFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+          if (_playPauseFocusNode.hasFocus) {
             _backFocusNode.requestFocus();
             return KeyEventResult.handled;
           }
         }
         if (key == LogicalKeyboardKey.arrowRight) {
           if (_backFocusNode.hasFocus) {
+            _playPauseFocusNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+          if (_playPauseFocusNode.hasFocus) {
             _fullscreenFocusNode.requestFocus();
             return KeyEventResult.handled;
           }
@@ -263,6 +274,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  bool get _isWindows =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
   @override
   Widget build(BuildContext context) {
     Widget screen;
@@ -280,7 +294,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
             label: 'Video player, double-tap to exit fullscreen',
             child: GestureDetector(
             onDoubleTap: _toggleFullscreen,
-            child: Stack(
+            child: _isWindows
+                // Windows: Column layout (header above WebView) because
+                // webview_win_floating renders a native window on top of Flutter.
+                ? Column(
+                    children: [
+                      _buildWindowsHeader(context),
+                      Expanded(
+                        child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
+                      ),
+                    ],
+                  )
+                : Stack(
               children: [
                 PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
                 // Fullscreen exit hint overlay
@@ -329,6 +354,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           ),
           ),
+        ),
+      );
+    } else if (_isWindows) {
+      // Windows non-fullscreen: Column layout with header above WebView
+      screen = Scaffold(
+        backgroundColor: Colors.black,
+        body: Column(
+          children: [
+            _buildWindowsHeader(context),
+            Expanded(
+              child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
+            ),
+          ],
         ),
       );
     } else {
@@ -422,11 +460,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             const SizedBox(width: 10),
                           ],
                           _buildFocusableButton(
+                            icon: Icons.play_arrow,
+                            onPressed: _simulatePlayerClick,
+                            tooltip: 'Play / Pause',
+                            focusNode: _playPauseFocusNode,
+                            order: 2,
+                          ),
+                          const SizedBox(width: 4),
+                          _buildFocusableButton(
                             icon: Icons.fullscreen,
                             onPressed: _toggleFullscreen,
                             tooltip: 'Fullscreen',
                             focusNode: _fullscreenFocusNode,
-                            order: 2,
+                            order: 3,
                           ),
                         ],
                       ),
@@ -443,6 +489,86 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     // Key events handled by HardwareKeyboard listener
     return screen;
+  }
+
+  /// Builds a solid header bar for Windows.
+  /// On Windows, webview_win_floating renders a native window ON TOP of Flutter,
+  /// so we cannot overlay Flutter widgets above it. Instead we use a Column
+  /// layout with this header above the WebView area.
+  Widget _buildWindowsHeader(BuildContext context) {
+    return Container(
+      color: const Color(0xFF1A1A1A),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 4,
+        left: 8,
+        right: 8,
+        bottom: 4,
+      ),
+      child: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Row(
+          children: [
+            _buildFocusableButton(
+              icon: Icons.arrow_back,
+              onPressed: () => Navigator.of(context).pop(),
+              tooltip: 'Back',
+              focusNode: _backFocusNode,
+              order: 1,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                widget.stream.name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (widget.stream.viewers > 0) ...[
+              const Icon(Icons.visibility, size: 14, color: Colors.white60),
+              const SizedBox(width: 4),
+              Text(
+                TimeUtils.formatViewers(widget.stream.viewers),
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+              const SizedBox(width: 10),
+            ],
+            if (widget.stream.isLive) ...[
+              const Icon(Icons.fiber_manual_record, size: 8, color: Colors.redAccent),
+              const SizedBox(width: 4),
+              const Text(
+                'LIVE',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
+            _buildFocusableButton(
+              icon: Icons.play_arrow,
+              onPressed: _simulatePlayerClick,
+              tooltip: 'Play / Pause',
+              focusNode: _playPauseFocusNode,
+              order: 2,
+            ),
+            const SizedBox(width: 4),
+            _buildFocusableButton(
+              icon: _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+              onPressed: _toggleFullscreen,
+              tooltip: _isFullscreen ? 'Exit Fullscreen' : 'Fullscreen',
+              focusNode: _fullscreenFocusNode,
+              order: 3,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Icon button: invisible at rest, dark circular bg + white border on D-pad focus

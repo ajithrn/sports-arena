@@ -76,6 +76,7 @@
 - Player overlay UI: gradient top bar with back, title, viewers, LIVE, fullscreen
 - Overlay auto-hides after 5s inactivity, reappears on any remote press
 - D-pad focus navigation between Back and Fullscreen buttons (Left/Right to move, Enter to activate)
+- Play/Pause fallback button in overlay header — reliable alternative when embed play button is unresponsive to D-pad taps
 - Buttons invisible at rest, show dark bg + white border ring on D-pad focus
 - Remote Select/Enter triggers play/pause when no button is focused
 - Media keys (play/pause/stop) supported
@@ -90,6 +91,8 @@
 - Stream card focus state: primary-colored border for keyboard navigation
 - macOS: WKWebView with inline media playback, network entitlements for streaming
 - Windows: WebView2 via webview_win_floating package (requires WebView2 Runtime), configured with writable userDataFolder for reliable operation regardless of install location
+- Windows player uses Column layout (header bar above WebView) since native WebView2 window renders on top of Flutter widgets
+- Windows DNS bypass via user-level WinINET proxy (auto-set on startup, auto-cleared on exit)
 - Help & Tips screen with platform-specific instructions
 - Update check downloads correct platform asset (APK/DMG/ZIP) via url_launcher
 - **In-app APK download & install** on Android (phone + TV) with progress dialog and cancel support

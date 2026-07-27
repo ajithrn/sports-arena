@@ -23,6 +23,7 @@ A local HTTP CONNECT proxy running on `localhost` that:
 │  Dart HttpClient ──→ HttpOverrides.findProxy ──→ PROXY localhost │
 │  Android WebView ──→ ProxyController ──→ PROXY localhost         │
 │  macOS WKWebView ──→ System HTTPS proxy ──→ PROXY localhost      │
+│  Windows WebView2 ─→ WinINET registry proxy ──→ PROXY localhost  │
 │                                                                  │
 │  ┌────────────────────────────────────────┐                      │
 │  │ DnsBypassService (localhost:PORT)      │                      │
@@ -133,6 +134,17 @@ If a new ad domain causes overlay issues, add it to the list.
 - `com.apple.security.network.server` entitlement required for binding a local server
 - Not compatible with Mac App Store distribution (sandbox required); distributed via GitHub releases (DMG)
 
+### Windows
+
+- User-level WinINET proxy set via registry: `HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings`
+  - `ProxyEnable` = 1 (DWORD)
+  - `ProxyServer` = `127.0.0.1:PORT` (string)
+- WebView2 (Edge) respects WinINET proxy settings automatically — no special API needed
+- No admin privileges required (user-level registry keys)
+- Proxy auto-cleared on app exit via `AppLifecycleListener(onExitRequested:)` — sets `ProxyEnable` back to 0
+- Also cleared when `DnsBypassService.stop()` is called (e.g., user disables proxy in settings)
+- If the app crashes without cleanup, the proxy remains set — user can fix via Windows Settings → Network → Proxy → Manual proxy → Off
+
 ### Dart HTTP
 
 - `HttpOverrides.global = DnsBypassHttpOverrides()` routes all `HttpClient` traffic through the proxy
@@ -177,3 +189,17 @@ The system proxy must be set before the WebView loads. Verify:
 1. App sandbox is disabled (`com.apple.security.app-sandbox = false`) in both `DebugProfile.entitlements` and `Release.entitlements` — sandboxed apps cannot run `networksetup`
 2. Check debug console for `macOS system proxy set to 127.0.0.1:PORT` — if you see `NOT set`, the `networksetup` call failed
 3. Verify manually: `networksetup -getsecurewebproxy Wi-Fi` should show `Enabled: Yes` while the app is running
+
+### Windows WebView2 shows `ERR_NAME_NOT_RESOLVED`
+
+This means the WinINET proxy wasn't set or WebView2 isn't using it:
+1. Check debug console for `Windows user proxy set to 127.0.0.1:PORT`
+2. Verify registry: `reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable` should show `0x1`
+3. If the app previously crashed, the proxy may still be set — disable manually via Windows Settings → Network & Internet → Proxy → Manual proxy setup → Off
+4. Some corporate group policies override user-level proxy settings — in this case, the proxy won't work
+
+### Windows proxy left enabled after crash
+
+If the app exits abnormally (crash, forced kill), the user-level proxy remains enabled. Internet traffic will fail until it's cleared:
+- Via Windows Settings: Network & Internet → Proxy → Manual proxy setup → Off
+- Via command: `reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 0 /f`
