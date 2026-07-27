@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
+import 'package:webview_win_floating/webview_win_floating.dart';
 import '../../utils/platform_utils.dart';
 
 /// Player widget for native platforms (Android, macOS, Windows).
@@ -23,16 +27,23 @@ class PlayerWidget extends StatefulWidget {
 }
 
 class PlayerWidgetState extends State<PlayerWidget> {
-  late final WebViewController _controller;
+  WebViewController? _controller;
   bool _isLoading = true;
+  bool _isInitialized = false;
 
   bool get _isDesktop => PlatformUtils.isDesktop;
 
   @override
   void initState() {
     super.initState();
-    _initController();
-    _controller.loadRequest(Uri.parse(widget.embedUrl));
+    _initAndLoad();
+  }
+
+  Future<void> _initAndLoad() async {
+    await _initController();
+    if (!mounted) return;
+    _controller!.loadRequest(Uri.parse(widget.embedUrl));
+    setState(() => _isInitialized = true);
     // Safety timeout: dismiss loading after 8 seconds regardless
     Future.delayed(const Duration(seconds: 8), () {
       if (mounted && _isLoading) {
@@ -44,7 +55,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
   @override
   void dispose() {
     // Stop any playing media and clear the WebView to prevent background playback
-    _controller.runJavaScript('''
+    _controller?.runJavaScript('''
       (function() {
         var videos = document.querySelectorAll('video');
         videos.forEach(function(v) { v.pause(); v.src = ''; v.load(); });
@@ -52,11 +63,11 @@ class PlayerWidgetState extends State<PlayerWidget> {
         audios.forEach(function(a) { a.pause(); a.src = ''; a.load(); });
       })();
     ''');
-    _controller.loadRequest(Uri.parse('about:blank'));
+    _controller?.loadRequest(Uri.parse('about:blank'));
     super.dispose();
   }
 
-  void _initController() {
+  Future<void> _initController() async {
     // macOS/iOS: use WebKit-specific params for inline media playback
     if (defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.iOS) {
@@ -65,11 +76,21 @@ class PlayerWidgetState extends State<PlayerWidget> {
         mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
       );
       _controller = WebViewController.fromPlatformCreationParams(webKitParams);
+    } else if (defaultTargetPlatform == TargetPlatform.windows) {
+      // Windows: use WindowsWebViewControllerCreationParams with a writable
+      // userDataFolder so WebView2 can store cache/cookies/session data.
+      // Without this, WebView2 may fail if the app is in a read-only location.
+      final appSupportDir = await getApplicationSupportDirectory();
+      final webViewDataDir = '${appSupportDir.path}${Platform.pathSeparator}webview2_data';
+      final winParams = WindowsWebViewControllerCreationParams(
+        userDataFolder: webViewDataDir,
+      );
+      _controller = WebViewController.fromPlatformCreationParams(winParams);
     } else {
       _controller = WebViewController();
     }
 
-    _controller
+    _controller!
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
@@ -101,15 +122,20 @@ class PlayerWidgetState extends State<PlayerWidget> {
 
     // Android-specific: disable user gesture requirement for media playback
     if (defaultTargetPlatform == TargetPlatform.android) {
-      _controller.setBackgroundColor(Colors.black);
+      _controller!.setBackgroundColor(Colors.black);
       final androidController =
-          _controller.platform as AndroidWebViewController;
+          _controller!.platform as AndroidWebViewController;
       androidController.setMediaPlaybackRequiresUserGesture(false);
       // Enable third-party cookies — embed players often need them
       final cookieManager = AndroidWebViewCookieManager(
         const PlatformWebViewCookieManagerCreationParams(),
       );
       cookieManager.setAcceptThirdPartyCookies(androidController, true);
+    }
+
+    // Windows-specific: set background color for WebView2
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      _controller!.setBackgroundColor(Colors.black);
     }
   }
 
@@ -140,7 +166,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
   void _injectAutoplay() {
     // On TV, be more aggressive with autoplay attempts
     final isTv = PlatformUtils.isTv;
-    _controller.runJavaScript('''
+    _controller!.runJavaScript('''
       (function() {
         function simulateTouch(el) {
           var rect = el.getBoundingClientRect();
@@ -255,7 +281,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
     }
 
     // Fallback: try to play/pause video directly via JS
-    _controller.runJavaScript('''
+    _controller!.runJavaScript('''
       (function() {
         var video = document.querySelector('video');
         if (video && video.paused) { video.play().catch(function(){}); return; }
@@ -271,7 +297,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
   }
 
   void _injectPopupBlocker() {
-    _controller.runJavaScript('''
+    _controller!.runJavaScript('''
       (function() {
         window.open = function() { return null; };
         try {
@@ -303,7 +329,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
   /// Instead of blocking ad domains (which change constantly), we remove
   /// any suspicious overlays directly from the DOM.
   void _injectOverlayRemover() {
-    _controller.runJavaScript('''
+    _controller!.runJavaScript('''
       (function() {
         function removeOverlays() {
           // Remove fixed/absolute positioned elements covering the viewport
@@ -386,7 +412,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
   /// Injects a keyboard handler into the WebView page so that when the
   /// WebView has platform focus on TV, Enter/Space triggers play/pause.
   void _injectTvKeyboardHandler() {
-    _controller.runJavaScript('''
+    _controller!.runJavaScript('''
       (function() {
         if (window.__tvKeyHandlerInstalled) return;
         window.__tvKeyHandlerInstalled = true;
@@ -422,13 +448,23 @@ class PlayerWidgetState extends State<PlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Show loading indicator until controller is initialized
+    if (!_isInitialized || _controller == null) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     // Desktop (macOS/Windows): simple WebViewWidget, no special composition needed
     if (_isDesktop) {
       return Container(
         color: Colors.black,
         child: Stack(
           children: [
-            WebViewWidget(controller: _controller),
+            WebViewWidget(controller: _controller!),
             if (_isLoading)
               IgnorePointer(
                 child: Container(
@@ -451,7 +487,7 @@ class PlayerWidgetState extends State<PlayerWidget> {
         children: [
           WebViewWidget.fromPlatformCreationParams(
             params: AndroidWebViewWidgetCreationParams(
-              controller: _controller.platform,
+              controller: _controller!.platform,
               displayWithHybridComposition: true,
               gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
                 Factory<VerticalDragGestureRecognizer>(

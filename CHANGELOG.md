@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.1 - 2026-07-27
+
+### Fixed
+- **Windows player not working** — WebView2 failed to initialize because no writable `userDataFolder` was configured; if the app was installed in a read-only location (e.g. `C:\Program Files\`) the player would silently fail to load
+- Windows WebView2 now uses `getApplicationSupportDirectory()/webview2_data` as its user data folder, ensuring cache/cookies/session data persist correctly
+
+### Changed
+- Player widget controller initialization is now async to support platform-specific setup that requires awaiting directory paths (Windows)
+- Added `webview_win_floating` import for `WindowsWebViewControllerCreationParams` access
+- Player shows loading indicator while WebView2 controller initializes on Windows
+
 ## 1.4.0 - 2026-07-21
 
 ### Added

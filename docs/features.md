@@ -89,7 +89,7 @@
 - Stream card hover state: scale up, elevated shadow
 - Stream card focus state: primary-colored border for keyboard navigation
 - macOS: WKWebView with inline media playback, network entitlements for streaming
-- Windows: WebView2 via webview_win_floating package (requires WebView2 Runtime)
+- Windows: WebView2 via webview_win_floating package (requires WebView2 Runtime), configured with writable userDataFolder for reliable operation regardless of install location
 - Help & Tips screen with platform-specific instructions
 - Update check downloads correct platform asset (APK/DMG/ZIP) via url_launcher
 - **In-app APK download & install** on Android (phone + TV) with progress dialog and cancel support
