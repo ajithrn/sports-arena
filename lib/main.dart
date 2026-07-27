@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -65,7 +66,49 @@ void main() async {
               'WKWebView player will not bypass ISP blocking');
         }
       }
+
+      // On Windows, set user-level Internet proxy so WebView2 routes through
+      // our CONNECT proxy for DoH-based DNS resolution.
+      // WebView2 (Edge) uses WinINET proxy settings from the registry.
+      // This does NOT require admin privileges.
+      if (PlatformUtils.isDesktop &&
+          defaultTargetPlatform == TargetPlatform.windows &&
+          bypass.isRunning) {
+        try {
+          // Enable proxy and set proxy server in user's Internet Settings
+          await Process.run('reg', [
+            'add',
+            r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
+            '/v', 'ProxyEnable',
+            '/t', 'REG_DWORD',
+            '/d', '1',
+            '/f',
+          ]);
+          await Process.run('reg', [
+            'add',
+            r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
+            '/v', 'ProxyServer',
+            '/t', 'REG_SZ',
+            '/d', '127.0.0.1:${bypass.port}',
+            '/f',
+          ]);
+          debugPrint('Windows user proxy set to 127.0.0.1:${bypass.port}');
+        } catch (e) {
+          debugPrint('Failed to set Windows proxy: $e — '
+              'WebView2 player will not bypass ISP DNS blocking');
+        }
+      }
     }
+  }
+
+  // On Windows, ensure the user proxy is cleared when the app exits.
+  // Without this, the system proxy would remain set after the app closes,
+  // breaking normal browsing until the user manually disables it.
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+    AppLifecycleListener(onExitRequested: () async {
+      await DnsBypassService().stop();
+      return AppExitResponse.exit;
+    });
   }
 
   // Initialize window_manager for desktop platforms
