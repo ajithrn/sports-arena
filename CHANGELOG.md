@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.2 - 2026-07-29
+
+### Changed
+- **Desktop player overlay auto-hides** — overlay now fades out after 5 seconds of inactivity on macOS/Linux (matching TV behavior)
+- Mouse movement or click anywhere on the player reveals the overlay
+- Removed play/pause button from desktop overlay (non-functional for initial playback due to browser trust requirements)
+- Replaced overlay reveal button with a minimal three-dots icon (no background) in top-left corner
+
 ## 1.4.1 - 2026-07-27
 
 ### Added

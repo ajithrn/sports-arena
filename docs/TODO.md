@@ -66,3 +66,32 @@ Currently users must manually go to Settings → Check for updates. Add a backgr
 2. Store `last_update_check` and `dismissed_version` in SharedPreferences
 3. Show `MaterialBanner` or `SnackBar` if update available and not dismissed
 4. Tapping "Update" triggers the existing download/install flow
+
+
+## Picture-in-Picture (PiP)
+
+Allow users to watch streams in a small floating window while multitasking.
+
+### Android (Real OS PiP)
+
+- [ ] Add `android:supportsPictureInPicture="true"` to `AndroidManifest.xml` activity
+- [ ] Add platform channel method to call `enterPictureInPictureMode()` from Flutter
+- [ ] Add PiP button to player overlay (Android only)
+- [ ] Handle `onUserLeaveHint` to auto-enter PiP when user presses home (optional)
+- [ ] Hide overlay controls when in PiP mode (too small to interact with)
+- [ ] Package: [`simple_pip_mode_flutter`](https://github.com/puntitowo/simple_pip_mode_flutter) or custom platform channel
+
+### macOS / Windows (Compact Mode — fake PiP)
+
+- [ ] Use `window_manager` to shrink window to ~320x180 and pin always-on-top
+- [ ] Save original window size/position before entering compact mode (same pattern as fullscreen)
+- [ ] Hide all chrome (overlay, title bar) in compact mode — just show the video
+- [ ] Add a small restore button (or double-click to restore) to exit compact mode
+- [ ] Add PiP/compact button to player overlay (desktop only)
+
+### Notes
+
+- macOS WKWebView does NOT support `allowsPictureInPictureMediaPlayback` (iOS only)
+- Native macOS PiP requires `AVPlayerLayer` access — not possible with embedded iframes
+- Desktop compact mode is the practical workaround using `window_manager` (already a dependency)
+- Android real PiP works because the OS shrinks the entire Activity including the WebView

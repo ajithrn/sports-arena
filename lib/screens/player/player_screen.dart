@@ -52,8 +52,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _startOverlayTimer() {
-    // Only auto-hide on TV
-    if (!PlatformUtils.isTv) return;
+    // Auto-hide on TV and desktop (like YouTube/Netflix behavior)
+    if (!PlatformUtils.isTv && !_isDesktop) return;
     _overlayTimer?.cancel();
     _overlayTimer = Timer(const Duration(seconds: 5), () {
       if (mounted) setState(() => _showOverlay = false);
@@ -372,116 +372,130 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else {
       screen = Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        onTap: _showOverlayAndResetTimer,
-        behavior: HitTestBehavior.translucent,
-        child: Stack(
-          children: [
-            // Player takes full space
-            Positioned.fill(
-              child: Container(
-                color: Colors.black,
-                child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
+      body: MouseRegion(
+        onHover: _isDesktop ? (_) => _showOverlayAndResetTimer() : null,
+        onEnter: _isDesktop ? (_) => _showOverlayAndResetTimer() : null,
+        child: GestureDetector(
+          onTap: _showOverlayAndResetTimer,
+          behavior: HitTestBehavior.translucent,
+          child: Stack(
+            children: [
+              // Player takes full space
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black,
+                  child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
+                ),
               ),
-            ),
-            // Top overlay with back, title, info, fullscreen — auto-hides on TV
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              child: IgnorePointer(
-                ignoring: !_showOverlay,
-                child: AnimatedOpacity(
-                  opacity: _showOverlay ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 300),
-                  child: Container(
-                    padding: EdgeInsets.only(
-                      top: MediaQuery.of(context).padding.top + 8,
-                      left: 8,
-                      right: 8,
-                      bottom: 20,
-                    ),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black87,
-                          Colors.black45,
-                          Colors.transparent,
-                        ],
-                        stops: [0.0, 0.6, 1.0],
+              // Top overlay with back, title, info, fullscreen — auto-hides
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: IgnorePointer(
+                  ignoring: !_showOverlay,
+                  child: AnimatedOpacity(
+                    opacity: _showOverlay ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: Container(
+                      padding: EdgeInsets.only(
+                        top: MediaQuery.of(context).padding.top + 8,
+                        left: 8,
+                        right: 8,
+                        bottom: 20,
                       ),
-                    ),
-                    child: FocusTraversalGroup(
-                      policy: OrderedTraversalPolicy(),
-                      child: Row(
-                        children: [
-                          _buildFocusableButton(
-                            icon: Icons.arrow_back,
-                            onPressed: () => Navigator.of(context).pop(),
-                            tooltip: 'Back',
-                            focusNode: _backFocusNode,
-                            order: 1,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              widget.stream.name,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (widget.stream.viewers > 0) ...[
-                            const Icon(Icons.visibility, size: 14, color: Colors.white60),
-                            const SizedBox(width: 4),
-                            Text(
-                              TimeUtils.formatViewers(widget.stream.viewers),
-                              style: const TextStyle(color: Colors.white60, fontSize: 12),
-                            ),
-                            const SizedBox(width: 10),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black87,
+                            Colors.black45,
+                            Colors.transparent,
                           ],
-                          if (widget.stream.isLive) ...[
-                            const Icon(Icons.fiber_manual_record, size: 8, color: Colors.redAccent),
-                            const SizedBox(width: 4),
-                            const Text(
-                              'LIVE',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
+                          stops: [0.0, 0.6, 1.0],
+                        ),
+                      ),
+                      child: FocusTraversalGroup(
+                        policy: OrderedTraversalPolicy(),
+                        child: Row(
+                          children: [
+                            _buildFocusableButton(
+                              icon: Icons.arrow_back,
+                              onPressed: () => Navigator.of(context).pop(),
+                              tooltip: 'Back',
+                              focusNode: _backFocusNode,
+                              order: 1,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                widget.stream.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            if (widget.stream.viewers > 0) ...[
+                              const Icon(Icons.visibility, size: 14, color: Colors.white60),
+                              const SizedBox(width: 4),
+                              Text(
+                                TimeUtils.formatViewers(widget.stream.viewers),
+                                style: const TextStyle(color: Colors.white60, fontSize: 12),
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                            if (widget.stream.isLive) ...[
+                              const Icon(Icons.fiber_manual_record, size: 8, color: Colors.redAccent),
+                              const SizedBox(width: 4),
+                              const Text(
+                                'LIVE',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                            _buildFocusableButton(
+                              icon: Icons.fullscreen,
+                              onPressed: _toggleFullscreen,
+                              tooltip: 'Fullscreen',
+                              focusNode: _fullscreenFocusNode,
+                              order: 2,
+                            ),
                           ],
-                          _buildFocusableButton(
-                            icon: Icons.play_arrow,
-                            onPressed: _simulatePlayerClick,
-                            tooltip: 'Play / Pause',
-                            focusNode: _playPauseFocusNode,
-                            order: 2,
-                          ),
-                          const SizedBox(width: 4),
-                          _buildFocusableButton(
-                            icon: Icons.fullscreen,
-                            onPressed: _toggleFullscreen,
-                            tooltip: 'Fullscreen',
-                            focusNode: _fullscreenFocusNode,
-                            order: 3,
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+              // Three-dots icon in back-button position — appears when overlay is hidden
+              if (!_showOverlay)
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 12,
+                  left: 12,
+                  child: GestureDetector(
+                    onTap: _showOverlayAndResetTimer,
+                    child: Semantics(
+                      button: true,
+                      label: 'Show controls',
+                      child: Icon(
+                        Icons.more_horiz,
+                        color: Colors.white.withValues(alpha: 0.5),
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
