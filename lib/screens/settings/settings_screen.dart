@@ -436,6 +436,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               }
             },
           ),
+          ListTile(
+            leading: const Icon(Icons.high_quality_outlined),
+            title: const Text('Default quality'),
+            subtitle: Text(settings.preferredQualityName),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showQualityPicker(settings),
+          ),
           SwitchListTile(
             secondary: const Icon(Icons.autorenew),
             title: const Text('Auto-refresh streams'),
@@ -553,6 +560,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 settings.setDohServer(entry.value);
                 DnsBypassService().setDohServer(entry.value);
                 DnsBypassService().clearCache();
+                Navigator.pop(ctx);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  void _showQualityPicker(SettingsProvider settings) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Default quality'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: SettingsProvider.qualityOptions.entries.map((entry) {
+            final isSelected = entry.value == settings.preferredQuality;
+            return ListTile(
+              title: Text(entry.key),
+              leading: Icon(
+                isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                color: isSelected ? Theme.of(ctx).colorScheme.primary : null,
+              ),
+              onTap: () {
+                settings.setPreferredQuality(entry.value);
                 Navigator.pop(ctx);
               },
             );

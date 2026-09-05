@@ -5,7 +5,7 @@ class AppConfig {
   // App Info
   // ──────────────────────────────────────────────
   static const String appName = 'Sports Arena';
-  static const String appVersion = '1.4.2'; // Keep in sync with pubspec.yaml version
+  static const String appVersion = '1.5.0'; // Keep in sync with pubspec.yaml version
 
   // ──────────────────────────────────────────────
   // API Path Configuration (structure stays the same, domain is user-provided)

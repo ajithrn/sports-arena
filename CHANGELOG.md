@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.0 - 2026-07-29
+
+### Added
+- **Multi-quality source selection** — streams that offer multiple qualities now show a quality label (e.g. 1080p, 4K) in the player; tapping it opens a picker to switch sources
+- **Default quality preference** — new setting under Defaults to choose the preferred playback quality (Highest available, 4K, 1080p, 720p, 540p); the player auto-selects the closest match, defaulting to 1080p
+
+### Fixed
+- **Embed player not loading on any platform** — the API returns playback URLs in a `sources` array from the stream detail endpoint, but the app read a non-existent `embed_url` field and never fetched the detail, so the player loaded an empty URL. The player now fetches the stream detail and resolves a real source before loading
+- Player now shows a loading indicator while resolving the source and a retryable error state when no playable source is found
+
+### Changed
+- In-player quality control uses a plain-text resolution label that blends with the other overlay info (viewers / LIVE) instead of a boxed button
+- TV D-pad navigation extended to include the quality control (Back ↔ Play/Pause ↔ Quality ↔ Fullscreen)
+
 ## 1.4.2 - 2026-07-29
 
 ### Changed

@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../models/stream_model.dart';
+import '../../providers/settings_provider.dart';
+import '../../providers/streams_provider.dart';
 import '../../utils/platform_utils.dart';
 import '../../utils/time_utils.dart';
 import 'player_widget.dart';
@@ -25,14 +28,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _overlayTimer;
   Size? _savedWindowSize;
   Offset? _savedWindowPosition;
-  final _playerKey = GlobalKey();
+
+  /// The stream with playback sources resolved. Starts as the list item passed
+  /// in (which has no sources), then gets replaced by the detail fetch.
+  late SportStream _stream;
+  bool _resolvingSource = false;
+  String? _sourceError;
+
+  /// Currently selected playback source URL (quality). Null until resolved.
+  String? _selectedSourceUrl;
+
+  GlobalKey _playerKey = GlobalKey();
   final _backFocusNode = FocusNode(debugLabel: 'Back Button');
   final _playPauseFocusNode = FocusNode(debugLabel: 'Play/Pause Button');
+  final _qualityFocusNode = FocusNode(debugLabel: 'Quality Button');
   final _fullscreenFocusNode = FocusNode(debugLabel: 'Fullscreen Button');
 
   @override
   void initState() {
     super.initState();
+    _stream = widget.stream; // initial (list item, no sources yet)
     // Register hardware keyboard listener for desktop shortcuts and TV remote.
     // On TV, we intercept Enter/Select to dispatch a native tap to the WebView
     // (producing a trusted MotionEvent that satisfies autoplay policies).
@@ -40,6 +55,58 @@ class _PlayerScreenState extends State<PlayerScreen> {
       HardwareKeyboard.instance.addHandler(_hardwareKeyHandler);
     }
     _startOverlayTimer();
+    // The streams-list item has no playback sources — fetch the stream detail
+    // to get the `sources` array before we can load the embed player.
+    if (!_stream.hasSource) {
+      _resolveSource();
+    } else {
+      final preferred = context.read<SettingsProvider>().preferredQuality;
+      _selectedSourceUrl = _stream.sourceForPreferredHeight(preferred)?.url;
+    }
+  }
+
+  /// Switch to a different quality/source. Reassigns the player key so the
+  /// WebView fully reinitializes with the new URL.
+  void _selectSource(StreamSource source) {
+    if (source.url == _selectedSourceUrl) return;
+    setState(() {
+      _selectedSourceUrl = source.url;
+      _playerKey = GlobalKey(); // force WebView rebuild with the new URL
+    });
+    _showOverlayAndResetTimer();
+  }
+
+  /// Fetch the single-stream detail to populate playback sources.
+  Future<void> _resolveSource() async {
+    setState(() {
+      _resolvingSource = true;
+      _sourceError = null;
+    });
+    try {
+      final provider = context.read<StreamsProvider>();
+      final detail = await provider.getStreamDetail(_stream.streamKey);
+      if (!mounted) return;
+      if (detail != null && detail.hasSource) {
+        setState(() {
+          _stream = detail;
+          _resolvingSource = false;
+          // Pick the source matching the user's preferred quality (default 1080p).
+          final preferred = context.read<SettingsProvider>().preferredQuality;
+          _selectedSourceUrl = detail.sourceForPreferredHeight(preferred)?.url;
+        });
+      } else {
+        setState(() {
+          _resolvingSource = false;
+          _sourceError = 'No playable source found for this stream.';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _resolvingSource = false;
+        _sourceError = 'Could not load the stream. Please try again.';
+      });
+    }
   }
 
   /// Hardware key handler that works even when WebView has platform focus
@@ -73,6 +140,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _overlayTimer?.cancel();
     _backFocusNode.dispose();
     _playPauseFocusNode.dispose();
+    _qualityFocusNode.dispose();
     _fullscreenFocusNode.dispose();
     if (_isDesktop || PlatformUtils.isTv) {
       HardwareKeyboard.instance.removeHandler(_hardwareKeyHandler);
@@ -175,7 +243,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           key == LogicalKeyboardKey.mediaPlay ||
           key == LogicalKeyboardKey.space) {
         // Only trigger play/pause if no button is currently focused
-        if (!_backFocusNode.hasFocus && !_playPauseFocusNode.hasFocus && !_fullscreenFocusNode.hasFocus) {
+        if (!_backFocusNode.hasFocus &&
+            !_playPauseFocusNode.hasFocus &&
+            !_qualityFocusNode.hasFocus &&
+            !_fullscreenFocusNode.hasFocus) {
           _simulatePlayerClick();
           return KeyEventResult.handled;
         }
@@ -192,14 +263,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
           key == LogicalKeyboardKey.arrowRight ||
           key == LogicalKeyboardKey.arrowUp ||
           key == LogicalKeyboardKey.arrowDown) {
-        if (!_backFocusNode.hasFocus && !_playPauseFocusNode.hasFocus && !_fullscreenFocusNode.hasFocus) {
+        final hasQuality = _stream.labeledSources.length > 1;
+        if (!_backFocusNode.hasFocus &&
+            !_playPauseFocusNode.hasFocus &&
+            !_qualityFocusNode.hasFocus &&
+            !_fullscreenFocusNode.hasFocus) {
           // Nothing focused — first press focuses play/pause (most useful action)
           _playPauseFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
-        // Move between buttons: back ↔ play/pause ↔ fullscreen
+        // Move between buttons:
+        //   back ↔ play/pause ↔ [quality] ↔ fullscreen
         if (key == LogicalKeyboardKey.arrowLeft) {
           if (_fullscreenFocusNode.hasFocus) {
+            (hasQuality ? _qualityFocusNode : _playPauseFocusNode).requestFocus();
+            return KeyEventResult.handled;
+          }
+          if (_qualityFocusNode.hasFocus) {
             _playPauseFocusNode.requestFocus();
             return KeyEventResult.handled;
           }
@@ -214,6 +294,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             return KeyEventResult.handled;
           }
           if (_playPauseFocusNode.hasFocus) {
+            (hasQuality ? _qualityFocusNode : _fullscreenFocusNode).requestFocus();
+            return KeyEventResult.handled;
+          }
+          if (_qualityFocusNode.hasFocus) {
             _fullscreenFocusNode.requestFocus();
             return KeyEventResult.handled;
           }
@@ -301,13 +385,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     children: [
                       _buildWindowsHeader(context),
                       Expanded(
-                        child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
+                        child: _buildPlayerArea(),
                       ),
                     ],
                   )
                 : Stack(
               children: [
-                PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
+                _buildPlayerArea(),
                 // Fullscreen exit hint overlay
                 if (_showFullscreenHint)
                   Positioned.fill(
@@ -364,7 +448,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           children: [
             _buildWindowsHeader(context),
             Expanded(
-              child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
+              child: _buildPlayerArea(),
             ),
           ],
         ),
@@ -384,7 +468,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               Positioned.fill(
                 child: Container(
                   color: Colors.black,
-                  child: PlayerWidget(key: _playerKey, embedUrl: widget.stream.embedUrl, onDoubleTap: _toggleFullscreen),
+                  child: _buildPlayerArea(),
                 ),
               ),
               // Top overlay with back, title, info, fullscreen — auto-hides
@@ -430,7 +514,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                widget.stream.name,
+                                _stream.name,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 16,
@@ -439,16 +523,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (widget.stream.viewers > 0) ...[
+                            if (_stream.viewers > 0) ...[
                               const Icon(Icons.visibility, size: 14, color: Colors.white60),
                               const SizedBox(width: 4),
                               Text(
-                                TimeUtils.formatViewers(widget.stream.viewers),
+                                TimeUtils.formatViewers(_stream.viewers),
                                 style: const TextStyle(color: Colors.white60, fontSize: 12),
                               ),
                               const SizedBox(width: 10),
                             ],
-                            if (widget.stream.isLive) ...[
+                            if (_stream.isLive) ...[
                               const Icon(Icons.fiber_manual_record, size: 8, color: Colors.redAccent),
                               const SizedBox(width: 4),
                               const Text(
@@ -462,12 +546,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               ),
                               const SizedBox(width: 10),
                             ],
+                            // Quality selector — plain text label, only when
+                            // more than one source is available
+                            if (_stream.labeledSources.length > 1) ...[
+                              _buildQualityLabel(order: 2),
+                              const SizedBox(width: 10),
+                            ],
                             _buildFocusableButton(
                               icon: Icons.fullscreen,
                               onPressed: _toggleFullscreen,
                               tooltip: 'Fullscreen',
                               focusNode: _fullscreenFocusNode,
-                              order: 2,
+                              order: 3,
                             ),
                           ],
                         ),
@@ -505,6 +595,166 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return screen;
   }
 
+  /// Builds the player area: a loader while the stream source is being
+  /// resolved, an error message if none is found, or the WebView player.
+  Widget _buildPlayerArea() {
+    if (_resolvingSource) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white54),
+      );
+    }
+    if (_sourceError != null || !_stream.hasSource) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white54, size: 40),
+              const SizedBox(height: 12),
+              Text(
+                _sourceError ?? 'No playable source found for this stream.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: _resolveSource,
+                icon: const Icon(Icons.refresh, color: Colors.white),
+                label: const Text('Retry', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return PlayerWidget(
+      key: _playerKey,
+      embedUrl: _selectedSourceUrl ?? _stream.embedUrl,
+      onDoubleTap: _toggleFullscreen,
+    );
+  }
+
+  /// Current source's friendly label, e.g. "1080p". Empty if unresolved.
+  String get _currentQualityLabel {
+    if (_selectedSourceUrl == null) return '';
+    final match =
+        _stream.labeledSources.where((s) => s.url == _selectedSourceUrl);
+    return match.isEmpty ? '' : match.first.label;
+  }
+
+  /// A plain-text quality label (e.g. "1080p") that blends in with the other
+  /// overlay text (viewers / LIVE), tappable to open the quality picker.
+  /// On TV it shows a subtle underline/highlight when D-pad focused.
+  Widget _buildQualityLabel({required int order}) {
+    return FocusTraversalOrder(
+      order: NumericFocusOrder(order.toDouble()),
+      child: Focus(
+        focusNode: _qualityFocusNode,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
+              (event.logicalKey == LogicalKeyboardKey.enter ||
+                  event.logicalKey == LogicalKeyboardKey.select ||
+                  event.logicalKey == LogicalKeyboardKey.space)) {
+            _showQualityPicker();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Builder(
+          builder: (context) {
+            final isFocused = Focus.of(context).hasFocus;
+            return GestureDetector(
+              onTap: _showQualityPicker,
+              child: Semantics(
+                button: true,
+                label: 'Quality $_currentQualityLabel. Tap to change.',
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    color: isFocused ? Colors.white24 : Colors.transparent,
+                  ),
+                  child: Text(
+                    _currentQualityLabel,
+                    style: TextStyle(
+                      color: isFocused ? Colors.white : Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Show a bottom sheet (mobile) / menu of available qualities.
+  void _showQualityPicker() {
+    _showOverlayAndResetTimer();
+    final sources = _stream.labeledSources;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.hd_outlined, size: 18, color: Colors.white70),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Quality',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...sources.map((source) {
+                final selected = source.url == _selectedSourceUrl;
+                return ListTile(
+                  leading: Icon(
+                    selected ? Icons.check_circle : Icons.high_quality_outlined,
+                    color: selected ? Theme.of(context).colorScheme.primary : Colors.white54,
+                  ),
+                  title: Text(
+                    source.label,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _selectSource(source);
+                  },
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   /// Builds a solid header bar for Windows.
   /// On Windows, webview_win_floating renders a native window ON TOP of Flutter,
   /// so we cannot overlay Flutter widgets above it. Instead we use a Column
@@ -532,7 +782,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                widget.stream.name,
+                _stream.name,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 15,
@@ -541,16 +791,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (widget.stream.viewers > 0) ...[
+            if (_stream.viewers > 0) ...[
               const Icon(Icons.visibility, size: 14, color: Colors.white60),
               const SizedBox(width: 4),
               Text(
-                TimeUtils.formatViewers(widget.stream.viewers),
+                TimeUtils.formatViewers(_stream.viewers),
                 style: const TextStyle(color: Colors.white60, fontSize: 12),
               ),
               const SizedBox(width: 10),
             ],
-            if (widget.stream.isLive) ...[
+            if (_stream.isLive) ...[
               const Icon(Icons.fiber_manual_record, size: 8, color: Colors.redAccent),
               const SizedBox(width: 4),
               const Text(
@@ -572,12 +822,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
               order: 2,
             ),
             const SizedBox(width: 4),
+            if (_stream.labeledSources.length > 1) ...[
+              _buildQualityLabel(order: 3),
+              const SizedBox(width: 10),
+            ],
             _buildFocusableButton(
               icon: _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
               onPressed: _toggleFullscreen,
               tooltip: _isFullscreen ? 'Exit Fullscreen' : 'Fullscreen',
               focusNode: _fullscreenFocusNode,
-              order: 3,
+              order: 4,
             ),
           ],
         ),

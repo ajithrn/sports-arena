@@ -8,6 +8,7 @@ class SettingsProvider extends ChangeNotifier {
   static const String _refreshIntervalKey = 'refresh_interval';
   static const String _proxyEnabledKey = 'proxy_enabled';
   static const String _dohServerKey = 'doh_server';
+  static const String _preferredQualityKey = 'preferred_quality';
 
   /// Available DoH server presets (only servers supporting JSON API)
   static const Map<String, String> dohServers = {
@@ -18,6 +19,17 @@ class SettingsProvider extends ChangeNotifier {
     'NextDNS': 'https://dns.nextdns.io/dns-query',
   };
 
+  /// Preferred default playback quality, as a resolution height.
+  /// 0 means "Highest available". The player picks the closest matching
+  /// source, falling back to the highest available when there's no exact match.
+  static const Map<String, int> qualityOptions = {
+    'Highest available': 0,
+    '4K (2160p)': 2160,
+    '1080p': 1080,
+    '720p': 720,
+    '540p': 540,
+  };
+
   late SharedPreferences _prefs;
   ThemeMode _themeMode = ThemeMode.dark;
   String? _defaultCategory;
@@ -25,6 +37,7 @@ class SettingsProvider extends ChangeNotifier {
   int _refreshIntervalSeconds = 60;
   bool _proxyEnabled = true;
   String _dohServer = 'https://cloudflare-dns.com/dns-query';
+  int _preferredQuality = 1080; // default to 1080p
 
   // Getters
   ThemeMode get themeMode => _themeMode;
@@ -33,6 +46,17 @@ class SettingsProvider extends ChangeNotifier {
   int get refreshIntervalSeconds => _refreshIntervalSeconds;
   bool get proxyEnabled => _proxyEnabled;
   String get dohServer => _dohServer;
+
+  /// Preferred playback quality as a resolution height (0 = highest available).
+  int get preferredQuality => _preferredQuality;
+
+  /// Friendly name for the current preferred quality.
+  String get preferredQualityName {
+    for (final entry in qualityOptions.entries) {
+      if (entry.value == _preferredQuality) return entry.key;
+    }
+    return 'Highest available';
+  }
 
   /// Friendly name for the current DoH server
   String get dohServerName {
@@ -61,6 +85,12 @@ class SettingsProvider extends ChangeNotifier {
       // Default to Cloudflare IP — most reliable across all platforms
       // including Android emulators where domain-based DoH may be slow
       _dohServer = 'https://cloudflare-dns.com/dns-query';
+    }
+    final savedQuality = _prefs.getInt(_preferredQualityKey);
+    if (savedQuality != null && qualityOptions.containsValue(savedQuality)) {
+      _preferredQuality = savedQuality;
+    } else {
+      _preferredQuality = 1080; // default 1080p
     }
     notifyListeners();
   }
@@ -102,6 +132,12 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setDohServer(String url) async {
     _dohServer = url;
     await _prefs.setString(_dohServerKey, url);
+    notifyListeners();
+  }
+
+  Future<void> setPreferredQuality(int height) async {
+    _preferredQuality = height;
+    await _prefs.setInt(_preferredQualityKey, height);
     notifyListeners();
   }
 }

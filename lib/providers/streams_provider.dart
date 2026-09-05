@@ -78,6 +78,13 @@ class StreamsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Fetch the full detail for a single stream (includes playback `sources`).
+  /// The streams-list endpoint omits sources, so the player must call this
+  /// to get a usable embed URL.
+  Future<SportStream?> getStreamDetail(String streamKey) {
+    return _apiService.getStream(streamKey);
+  }
+
   /// Load categories from API, sorted by preferred display order
   Future<void> loadCategories() async {
     try {
